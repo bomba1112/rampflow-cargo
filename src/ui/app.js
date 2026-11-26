@@ -11,6 +11,7 @@ import { putFile, getFile, clearFiles } from '../web/files.js';
 import { readLirPdf } from '../web/lirfile.js';
 import { pageRect, sheetOf } from '../core/layouts.js';
 import { S, t, setLang, getLang } from './strings.js';
+import { createOps } from './ops.js';
 
 const TZ = 'Asia/Baku';
 const PREF_KEY = 'rampflow.ui.v1';
@@ -74,7 +75,7 @@ let toastTimer = null;
 function loadPrefs() {
   try {
     const p = JSON.parse(localStorage.getItem(PREF_KEY) || '{}');
-    if (p.tab && TAB_ORDER.includes(p.tab)) ui.tab = p.tab;
+    if (p.tab && (TAB_ORDER.includes(p.tab) || OPS.allTabs().includes(p.tab))) ui.tab = p.tab;
     if (p.flightId) ui.flightId = p.flightId;
   } catch (e) {
     /* prefs are a convenience only */
@@ -96,6 +97,13 @@ function curFlight() {
   }
   return ui.flightId ? s.flights[ui.flightId] : null;
 }
+
+/* turnaround functions (roles, stand check, Chocks, timers, delays, shift dashboard): see ops.js */
+const OPS = createOps({
+  store: () => store, st, ui, $, esc, fmtT, fmtD, fmtClock, toast, render, renderSheet, openSheet, closeSheet, curFlight, savePrefs,
+  describe: (ev) => describe(ev),
+});
+Object.assign(ICON, OPS.icons);
 
 /* ---------- describing events (for logs and history) ---------- */
 function dollyText(ref) {
@@ -128,7 +136,7 @@ function describe(ev) {
     case T.LOADING_TIME_CORRECTED:
       return t(S.log.LOADING_TIME_CORRECTED, { what: p.field === 'START' ? S.load.start : S.load.end, old: fmtT(p.oldValue), new: fmtT(p.newValue), reason: p.reason });
     case T.ACTION_UNDONE: return S.log.ACTION_UNDONE;
-    default: return ev.eventType;
+    default: return OPS.describe(ev) || ev.eventType;
   }
 }
 
@@ -150,7 +158,7 @@ function flightOf(ev, byId) {
     const first = byId.get((p.eventIds || [])[0]);
     return first ? flightOf(first, byId) : null;
   }
-  return null;
+  return OPS.flightOf(ev);
 }
 
 function logItems(flightId, onlyUld) {
@@ -243,7 +251,7 @@ function uldBoxHtml(u) {
   const showLabel = !u.custom || u.showLabel;
   const band = cell.label ? `<span class="band">${pres ? '✓ ' : ''}${esc(cell.label)}</span>` : '';
   const style = `left:${rect.x}px;top:${rect.y}px;width:${rect.w + 1}px;height:${rect.h + 1}px`;
-  return `<button class="ub ${cls}${u.custom ? ' cx' : ''}${rect.w < 70 ? ' nar' : ''}" style="${style}" data-act="uld" data-id="${esc(v.id)}" aria-label="${esc(u.label)} ${esc(v.number)}">${showLabel ? `<i>${esc(u.label)}</i>` : ''}${lines}${band}</button>`;
+  return `<button class="ub ${cls}${u.custom ? ' cx' : ''}${rect.w < 70 ? ' nar' : ''}" style="${style}" data-act="uld" data-id="${esc(v.id)}" aria-label="${esc(u.label)} ${esc(v.number)}">${OPS.zoneBadge(v.flightId, v.positionCode)}${showLabel ? `<i>${esc(u.label)}</i>` : ''}${lines}${band}</button>`;
 }
 
 function sheetHtml(v) {
@@ -287,7 +295,7 @@ function pageSheetHtml(f, url) {
     }
     const st0 = c.view.status;
     const cls = st0 === ULD_STATUS.ON_DOLLY ? 'on' : st0 === ULD_STATUS.PRESENTED || st0 === ULD_STATUS.LOADED_CONFIRMED ? 'pres' : 'unk';
-    h += `<button class="zn ${cls}" style="${style}" data-act="uld" data-id="${esc(c.view.id)}" aria-label="${esc(cell.code)}">${c.label ? `<span class="band">${cls === 'pres' ? '✓ ' : ''}${esc(c.label)}</span>` : ''}</button>`;
+    h += `<button class="zn ${cls}" style="${style}" data-act="uld" data-id="${esc(c.view.id)}" aria-label="${esc(cell.code)}">${OPS.zoneBadge(f.id, cell.code)}${c.label ? `<span class="band">${cls === 'pres' ? '✓ ' : ''}${esc(c.label)}</span>` : ''}</button>`;
   }
   return h + '</div>';
 }
@@ -517,6 +525,7 @@ function sheetUld(id) {
     h += `<div class="card" style="margin-bottom:8px">${S.uld.noDolly}${v.lastDolly ? ' ' + t(S.uld.wasOn, { label: esc(v.lastDolly.label) }) : ''}</div>`;
     b += `<button class="btn primary" data-act="pickDolly" data-id="${esc(id)}">${S.btn.link}</button>`;
   }
+  h += OPS.uldExtra(v);
   h += `<div class="stack">${b}<button class="btn ghost" data-act="closeSheet">${S.btn.close}</button></div>`;
   const hist = logItems(v.flightId, id);
   if (hist.length) h += `<h2>${S.uld.history}</h2>${logHtml(hist)}`;
@@ -652,6 +661,7 @@ function sheetTime(sh) {
 function sheetMenu() {
   return `<div class="grab"></div><p class="sh-t">${S.sheet.menuTitle}</p><p class="sh-s">${S.sheet.about}</p><div class="stack">
     <div class="card" style="margin:0"><b>${S.sheet.lang}</b><div class="chips mt"><button class="fchip ${getLang() === 'az' ? 'on' : ''}" data-act="lang" data-lang="az">Azərbaycanca</button><button class="fchip ${getLang() === 'ru' ? 'on' : ''}" data-act="lang" data-lang="ru">Русский</button></div></div>
+    ${OPS.menuExtra()}
     <div class="card muted" style="font-size:14px;margin:0"><b style="color:var(--ink)">${S.sheet.open}</b><br>${S.sheet.openText}</div>
     <button class="btn sm ghost" data-act="resetAsk">${S.btn.reset}</button><button class="btn ghost" data-act="closeSheet">${S.btn.close}</button></div>`;
 }
@@ -679,9 +689,10 @@ function renderSheet() {
     case 'menu': h = sheetMenu(); break;
     case 'pos': h = sheetPos(sh.code); break;
     case 'lirNew': h = sheetLirNew(); break;
-    default: h = '';
+    default: h = OPS.sheet(sh) || '';
   }
   el.innerHTML = `<div class="panel">${h}</div>`;
+  OPS.after();
   el.style.display = 'block';
   $('scrim').style.display = 'block';
 }
@@ -712,19 +723,24 @@ function toast(msg, withUndo, bad) {
 /* ---------- render ---------- */
 function render() {
   const f = curFlight();
-  $('hdr').innerHTML = `<div class="fl"><div class="t1">${f ? esc(f.number) + (f.stand ? ' · ' + esc(f.stand) : '') : S.appName}</div><div class="t2">${!f || (f.lir && f.lir.demo) || !f.lir ? `<span class="demo">${S.demo}</span>` : ''}${f ? `<span>${esc(f.aircraftType)}</span><span>${S.flightStatus[f.status]}</span>` : ''}</div></div><button class="menubtn" data-act="menu" aria-label="${S.btn.menu}">⋮</button>`;
-  $('nav').innerHTML = TAB_ORDER.map((k) => `<button class="${ui.tab === k ? 'on' : ''}" data-act="tab" data-tab="${k}">${ic(k)}${S.tabs[k]}</button>`).join('');
+  const tabsNow = OPS.tabs();
+  if (!tabsNow.includes(ui.tab)) ui.tab = tabsNow[0];
+  const fShow = f && OPS.showFlight();
+  $('hdr').innerHTML = `<div class="fl"><div class="t1">${fShow ? esc(f.number) + (f.stand ? ' · ' + esc(f.stand) : '') : S.appName}</div><div class="t2">${!f || (f.lir && f.lir.demo) || !f.lir ? `<span class="demo">${S.demo}</span>` : ''}${fShow ? `<span>${esc(f.aircraftType)}</span><span>${S.flightStatus[f.status]}</span>` : ''}${OPS.roleChip()}</div></div>${OPS.netChip()}<button class="menubtn" data-act="menu" aria-label="${S.btn.menu}">⋮</button>`;
+  $('nav').innerHTML = tabsNow.map((k) => `<button class="${ui.tab === k ? 'on' : ''}" data-act="tab" data-tab="${k}">${ic(k)}${S.tabs[k]}</button>`).join('');
   const m = $('main');
   const keep = m.scrollTop;
   let h = '';
-  if (ui.tab === 'flights' || !f) h = viewFlights();
+  const opsHtml = OPS.isOpsTab(ui.tab) ? OPS.view(ui.tab, f) : null;
+  if (opsHtml != null) h = opsHtml;
+  else if (ui.tab === 'flights' || !f) h = viewFlights();
   else if (ui.tab === 'lir') h = viewLir(f);
   else if (ui.tab === 'dollies') h = viewDollies(f);
   else if (ui.tab === 'search') h = viewSearch(f);
   else if (ui.tab === 'load') h = viewLoad(f);
   const lirMode = ui.tab === 'lir' && !!f && !!f.lir;
   m.classList.toggle('lirmode', lirMode);
-  $('app').classList.toggle('wide', lirMode);
+  $('app').classList.toggle('wide', lirMode || OPS.wide());
   m.innerHTML = h;
   m.scrollTop = lirMode ? 0 : keep;
   if (lirMode) { layoutSheet(); requestAnimationFrame(() => layoutSheet()); }
@@ -855,6 +871,7 @@ const A = {
   },
   resetAsk() { ui.pending = { custom: 'reset' }; openSheet({ t: 'confirm', code: 'RESET', data: {} }); },
 };
+Object.assign(A, OPS.actions);
 // custom confirmation for destructive reset
 const baseConfirm = A.confirmYes;
 A.confirmYes = function () {
@@ -958,6 +975,7 @@ async function takeSharedFile() {
 
 /* ---------- start ---------- */
 async function main() {
+  OPS.init();
   loadPrefs();
   const storage = await pickStorage();
   storageKind = storage.kind || 'memory';

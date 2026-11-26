@@ -6,7 +6,7 @@
   "scripts": {
     "test": "node --test tests/",
     "build": "node build.mjs",
-    "check": "node --test tests/core.test.mjs && node build.mjs && node build.mjs --single && node tests/ui-smoke.mjs"
+    "check": "node --test tests/core.test.mjs tests/ops.test.mjs && node build.mjs && node build.mjs --single && node tests/ui-smoke.mjs"
   },
   "devDependencies": {
     "esbuild": "^0.25.0",

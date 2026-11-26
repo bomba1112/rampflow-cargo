@@ -9,6 +9,8 @@
 //   location  = optional manual observation of where a train is   -> state.locations
 //   (future)  = physical dolly asset with a permanent ID           -> NOT modelled in Stage 0
 
+import { OPS_T, OPS_HANDLERS } from './ops.js';
+
 export const SCHEMA_VERSION = 1;
 
 export const T = Object.freeze({
@@ -28,6 +30,7 @@ export const T = Object.freeze({
   LOADING_ENDED: 'LOADING_ENDED',
   LOADING_TIME_CORRECTED: 'LOADING_TIME_CORRECTED',
   ACTION_UNDONE: 'ACTION_UNDONE',
+  ...OPS_T, // turnaround operations (ops.js)
 });
 
 export const ULD_STATUS = Object.freeze({
@@ -63,6 +66,9 @@ export function emptyState() {
     singles: {},
     locations: {},
     loading: {},
+    ops: {}, // per flight: stand check, chocks, service timers, special cargo, loadmaster checklist (ops.js)
+    delays: {},
+    handovers: [],
   };
 }
 
@@ -303,6 +309,7 @@ const H = {
   [T.ACTION_UNDONE]() {
     // Handled in buildState: the listed events are skipped on replay.
   },
+  ...OPS_HANDLERS,
 };
 
 /** Apply one event. Returns false if this eventId was already applied (idempotent). */

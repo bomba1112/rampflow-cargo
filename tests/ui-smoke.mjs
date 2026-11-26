@@ -165,6 +165,47 @@ await step('flights tab has the open-LIR-file button and a hidden PDF input', as
   assert.ok(inp && /pdf/.test(inp.accept));
   click(q('[data-act="pickFile"]')); // must not throw
 });
+await step('turnaround: new tab keeps the old five tabs, stand check unlocks Chocks, no Cyrillic in the Azerbaijani UI', async () => {
+  tab('flights'); await wait();
+  click(q('[data-act="openFlight"]')); await wait();
+  assert.deepEqual(qa('#nav button').map((b) => b.dataset.tab), ['flights', 'lir', 'dollies', 'search', 'load', 'turn']);
+  tab('turn'); await wait();
+  assert.ok(q('[data-hold="chocksOn"]').disabled, 'Chocks ON waits for the stand check');
+  click(q('[data-act="fodOpen"]')); await wait();
+  for (let i = 0; i < 6; i++) click(q(`[data-act="fodTap"][data-i="${i}"]`));
+  click(q('#sheet [data-act="closeSheet"]')); await wait();
+  assert.ok(!q('[data-hold="chocksOn"]').disabled, 'Chocks ON is open after 6/6');
+  assert.ok(q('.netchip'), 'Online/Offline chip in the header');
+  assert.doesNotMatch(q('main').textContent + q('#hdr').textContent, /[А-Яа-яЁё]/);
+});
+await step('turnaround: delay sheet needs a code and minutes, then the delay is listed', async () => {
+  click(q('[data-act="delayNew"]')); await wait();
+  assert.ok(q('[data-act="dSave"]').disabled);
+  click(q('[data-act="dCode"][data-code="38"]')); await wait();
+  type('dmin', '15');
+  assert.ok(!q('[data-act="dSave"]').disabled);
+  click(q('[data-act="dSave"]')); await wait();
+  assert.match(q('.drow').textContent, /38/);
+});
+await step('turnaround: roles change the tabs, shift manager sees the dashboard, night theme is set', async () => {
+  click(q('[data-act="menu"]')); await wait();
+  click(q('[data-act="role"][data-role="lm"]')); await wait();
+  assert.deepEqual(qa('#nav button').map((b) => b.dataset.tab), ['flights', 'lir', 'special', 'ready']);
+  tab('ready'); await wait();
+  assert.equal(qa('[data-act="lmTap"]').length, 8);
+  click(q('[data-act="menu"]')); await wait();
+  click(q('[data-act="role"][data-role="ch"]')); await wait();
+  assert.deepEqual(qa('#nav button').map((b) => b.dataset.tab), ['overview', 'delaysmgr', 'handover']);
+  assert.ok(q('.kpis') && q('.tbl') && q('.tlw'));
+  tab('handover'); await wait();
+  assert.ok(q('[data-swipe="sendHandover"]'));
+  click(q('[data-act="menu"]')); await wait();
+  click(q('[data-act="theme"][data-theme="night"]')); await wait();
+  assert.equal(d.documentElement.getAttribute('data-theme'), 'night');
+  click(q('[data-act="theme"][data-theme="day"]')); await wait();
+  click(q('[data-act="role"][data-role="sv"]')); await wait();
+  assert.equal(qa('#nav button').length, 6);
+});
 await step('no runtime errors', () => assert.deepEqual(errors, []));
 
 let bad = 0;
