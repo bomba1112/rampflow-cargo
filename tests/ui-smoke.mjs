@@ -26,9 +26,11 @@ await step('flights list renders 3 flights + demo marker', () => {
 await step('open DM101 shows LIR with dolly numbers', async () => {
   click(byText('.fcard', 'DM101'));
   await wait();
-  assert.ok(qa('.lc').length >= 12);
-  const cell = byText('.lc', '10417') || qa('.lc')[0];
-  assert.match(q('main').textContent, /136/); // group number at bottom of cells
+  assert.equal(qa('.gc').length, 39, 'every cell of the paper grid is drawn');
+  assert.ok(qa('.ub').length >= 30, 'ULD boxes: ' + qa('.ub').length);
+  assert.ok(byText('.ub', '10417'), 'first ULD is on the sheet');
+  assert.match(q('main').textContent, /136-1/); // dolly shown on the band
+  assert.ok(q('.ub.cx'), 'units that stand across the centre line or over two cells have their own box');
 });
 await step('dollies tab: group 136 and 007 present, tug marker', () => {
   tab('dollies');
@@ -130,21 +132,31 @@ await step('language switch to Azerbaijani changes UI and keeps data', async () 
   assert.equal(d.documentElement.lang, 'az');
   assert.equal(w.localStorage.getItem('rampflow.lang'), 'az');
 });
-await step('Azerbaijani LIR rows are translated, no Cyrillic left in UI chrome', async () => {
+await step('Azerbaijani LIR screen is translated, no Cyrillic left in UI chrome', async () => {
   tab('lir'); await wait();
-  assert.match(q('main').textContent, /Əsas göyərtə/);
+  assert.match(q('main').textContent, /B747-8F · LIR nümunəsi/);
+  assert.match(q('main').textContent, /Çevir/);
   const chrome = q('nav').textContent + q('#hdr').textContent + q('main').textContent;
   assert.doesNotMatch(chrome, /[А-Яа-яЁё]/);
 });
-await step('LIR rotate switches between vertical and horizontal grid and remembers it', async () => {
+await step('LIR rotate turns the whole sheet by 90 degrees, back again, zoom buttons do not break it', async () => {
   tab('lir'); await wait();
-  assert.ok(q('.lgrid.v'), 'starts vertical');
+  const rot0 = q('#ls').dataset.rot;
+  assert.ok(rot0 === '0' || rot0 === '90');
   click(q('[data-act="rotate"]')); await wait();
-  assert.ok(q('.lgrid.h') && !q('.lgrid.v'));
-  assert.ok(qa('.lc').length >= 30, 'all positions drawn: ' + qa('.lc').length);
-  assert.match(w.localStorage.getItem('rampflow.ui.v1'), /"orient":"h"/);
+  const rot1 = q('#ls').dataset.rot;
+  assert.notEqual(rot1, rot0);
+  assert.equal(qa('.gc').length, 39, 'the same sheet, not another layout');
   click(q('[data-act="rotate"]')); await wait();
-  assert.ok(q('.lgrid.v'));
+  assert.equal(q('#ls').dataset.rot, rot0);
+  click(q('[data-act="zoomIn"]')); click(q('[data-act="zoomOut"]')); click(q('[data-act="fit"]')); await wait();
+  assert.ok(q('#ls'));
+});
+await step('tapping a ULD on the sheet opens its card', async () => {
+  tab('lir'); await wait();
+  click(q('.ub[data-id="u-f-dm101-ER"]')); await wait();
+  assert.match(q('#sheet').textContent, /ER/);
+  click(q('#sheet [data-act="closeSheet"]')); await wait();
 });
 await step('no runtime errors', () => assert.deepEqual(errors, []));
 

@@ -93,7 +93,16 @@ const H = {
     f.lir = { edno: p.edno, layout: p.layout, loadedAt: e.occurredAt, demo: !!p.demo };
     for (const pos of p.positions) {
       const id = posId(p.flightId, pos.code);
-      s.positions[id] = { id, flightId: p.flightId, code: pos.code, uldId: pos.uld ? pos.uld.id : null };
+      // box = where the ULD is drawn when it is not exactly inside its cell (a double-width unit, or one standing across the centre line).
+      s.positions[id] = {
+        id,
+        flightId: p.flightId,
+        code: pos.code,
+        uldId: pos.uld ? pos.uld.id : null,
+        covers: pos.covers || [],
+        box: pos.box || null,
+        showLabel: !!pos.showLabel,
+      };
       if (pos.uld) {
         s.ulds[pos.uld.id] = {
           id: pos.uld.id,
@@ -102,6 +111,8 @@ const H = {
           type: pos.uld.type,
           weight: pos.uld.weight,
           dest: pos.uld.dest,
+          cat: pos.uld.cat || '', // load category printed on the paper LIR (Q4, S5 ...)
+          via: pos.uld.via || '', // onward destinations
           positionCode: pos.code,
           status: ULD_STATUS.UNKNOWN,
           linked: null, // dolly ref while on a dolly

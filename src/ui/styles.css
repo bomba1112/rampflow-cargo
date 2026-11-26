@@ -60,30 +60,6 @@ h2 small{font-family:var(--body);font-size:13px;color:var(--muted);text-transfor
 .sumline{display:flex;gap:6px;flex-wrap:wrap;margin:2px 0 8px}
 .sumline .chip{font-size:14px;padding:5px 10px}
 .legend{font-size:13px;color:var(--muted);margin:0 2px 8px}
-.lr{margin-bottom:12px}
-.lr h3{font-size:13px;color:var(--muted);margin:0 2px 4px;font-weight:700;text-transform:uppercase;letter-spacing:.3px}
-.lrow{display:grid;grid-template-columns:repeat(4,1fr);gap:6px}
-.lscroll{overflow-x:auto;-webkit-overflow-scrolling:touch;padding-bottom:4px}
-.lgrid{display:grid;gap:6px}
-.lgrid.h .lc{min-height:104px}
-.lgrid.v .lc{min-height:84px;padding-top:14px}
-.lgrid .lc .uld{font-size:12px}
-.lgrid .lc.empty{min-height:0}
-.axis{font-family:var(--disp);font-weight:800;font-size:14px;letter-spacing:.8px;color:var(--muted);margin:2px 2px 6px}
-.axis.v{text-align:center}
-.axis.h{display:flex;justify-content:space-between}
-.lc{position:relative;min-height:106px;border:2px solid var(--ink);border-radius:10px;background:#fff;display:flex;flex-direction:column;align-items:center;justify-content:space-between;padding:15px 2px 5px;text-align:center;width:100%}
-.lc .code{position:absolute;left:5px;top:3px;font-size:11px;font-weight:700;color:var(--muted)}
-.lc .top{font-family:var(--disp);font-weight:800;font-size:30px;line-height:1;min-height:30px}
-.lc .uld{font-size:12px;font-weight:700;line-height:1.1;word-break:break-all}
-.lc .bot{font-family:var(--disp);font-weight:800;font-size:24px;line-height:1;min-height:24px}
-.lc.on{background:#E3EFFB;border-color:var(--info)}
-.lc.unk{border-style:dashed}
-.lc.pres{background:#FFF1D6;border-color:var(--warn);color:#5B3A10}
-.lc.pres .top,.lc.pres .bot{opacity:.75}
-.lc.pres::after{content:'✓';position:absolute;right:5px;top:2px;font-weight:800;color:var(--warn)}
-.lc.empty{background:#E3E6EA;border-color:#8A94A1;color:#5B6572;border-style:dotted}
-.lc.empty .uld{font-weight:600}
 .strip{display:grid;grid-template-columns:44px repeat(4,1fr);gap:6px;margin:10px 0 8px}
 .strip.one{grid-template-columns:1fr}
 .tug{background:var(--navy);color:#fff;border-radius:10px;display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:700;writing-mode:vertical-rl;transform:rotate(180deg);letter-spacing:.6px}
@@ -164,12 +140,46 @@ input:focus-visible,button:focus-visible{outline:3px solid var(--info);outline-o
   .hdr .t1{font-size:22px}
   nav button{min-height:50px;flex-direction:row;justify-content:center;gap:8px}
   main{padding:8px 12px 16px}
-  .lgrid.h .lc{min-height:92px}
-  .lgrid.h{grid-template-columns:repeat(var(--cols,14),minmax(0,1fr)) !important;min-width:0}
 }
 
-.lirbar{display:flex;gap:10px;align-items:center;margin-bottom:8px}
-.lirbar .legend{flex:1}
-.lirbar .btn{width:auto;min-width:120px;flex:none}
-.lgrid.h .lc .uld{font-size:10.5px;letter-spacing:-.2px;white-space:nowrap;word-break:normal}
-@media (orientation:landscape) and (max-height:600px){ .lgrid.h .lc{min-height:84px} .lgrid.h .lc .top{font-size:26px} .lgrid.h .lc .bot{font-size:20px} }
+/* ---------- LIR sheet: the paper LIR, rotate and zoom like a PDF viewer ---------- */
+#app.wide{max-width:none}
+main.lirmode{display:flex;flex-direction:column;overflow:hidden;padding:8px}
+.lirtop{display:flex;gap:6px;flex-wrap:wrap;margin:0 0 6px}
+.lirtop .chip{font-size:12px;padding:3px 8px}
+.sheetouter{flex:1;min-height:0;display:flex;flex-direction:column;gap:6px}
+.lirtools{display:flex;gap:6px;flex:none}
+.lirtools .btn{width:auto;flex:1;min-width:48px;min-height:44px;padding:0 8px;font-size:20px;gap:5px}
+.lirtools .btn span{font-size:15px}
+.sheetwrap{position:relative;flex:1;min-height:0;min-width:0;overflow:auto;display:flex;background:#C9CFD6;border:1px solid var(--line);border-radius:10px;touch-action:pan-x pan-y;-webkit-overflow-scrolling:touch;overscroll-behavior:contain}
+.sheetbox{position:relative;margin:auto;flex:none}
+.lirleg{margin:5px 2px 0;flex:none;font-size:12px;line-height:1.25}
+.ls{position:absolute;left:0;top:0;transform-origin:0 0;background:#fff;font-family:Arial,Helvetica,sans-serif;color:#111}
+.gc{position:absolute;border:1px solid #1a1a1a;box-sizing:border-box;pointer-events:none}
+.gc i,.ub i{position:absolute;left:4px;top:2px;font:normal 13px/14px Arial,Helvetica,sans-serif;color:#222;letter-spacing:0}
+.gc.bulk b{position:absolute;left:0;right:0;top:50%;transform:translateY(-50%);text-align:center;font:600 12px Arial,Helvetica,sans-serif;color:#777}
+.ub{position:absolute;box-sizing:border-box;margin:0;border:1px solid transparent;background:transparent;padding:17px 1px 25px;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;overflow:hidden;font:12px/13px Arial,Helvetica,sans-serif;color:#111;border-radius:0;-webkit-appearance:none;appearance:none}
+.ub.cx{border-color:#1a1a1a}
+.ub .ut{font-size:12px}
+.ub .un{font-weight:700;font-size:15px;line-height:17px;letter-spacing:-.2px;white-space:nowrap}
+.ub.nar .un{font-size:12.5px;letter-spacing:-.4px}
+.ub .band{position:absolute;left:0;right:0;bottom:0;height:23px;font:800 16px/23px Arial,Helvetica,sans-serif;color:#fff;background:#0A58A8;white-space:nowrap;letter-spacing:.2px}
+.ub.on{background:rgba(10,88,168,.14)}
+.ub.pres{background:rgba(255,170,0,.30)}
+.ub.pres .band{background:#8F4A00}
+.ub:active{outline:3px solid var(--accent);outline-offset:-3px}
+.pay{position:absolute;text-align:center;font:13px/16px Arial,Helvetica,sans-serif;color:#111;pointer-events:none}
+.pay b{display:block;font-weight:400;margin-bottom:3px;font-size:14px}
+.pay table{border-collapse:collapse;width:100%}
+.pay th,.pay td{border:1.5px solid #111;height:20px;padding:0;font-weight:400;font-size:13px}
+.pay td{font-size:14px}
+/* Phone turned sideways: use the whole width; buttons go to a column on the right, the summary line is hidden */
+@media (orientation:landscape) and (max-height:600px){
+  main.lirmode{padding:6px 8px}
+  .lirtop,.lirleg{display:none}
+  .sheetouter{flex-direction:row-reverse}
+  .lirtools{flex-direction:column;width:58px}
+  .lirtools .btn{flex:none;min-width:0;padding:0;min-height:52px}
+  .lirtools .btn span{display:none}
+}
+

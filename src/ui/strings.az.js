@@ -33,7 +33,7 @@ export const AZ = {
   units: { kg: 'kq', h: 'saat', min: 'dəq' },
   kind: { group: 'Qrup', single: '20 ft' },
   layout: {
-    titles: { DEMO_A: 'Demo sxem A (rəsmi deyil)', DEMO_B: 'Demo sxem B (rəsmi deyil)', DEMO_C: 'Demo sxem C (rəsmi deyil)' },
+    titles: { DEMO_A: 'Demo sxem A (rəsmi deyil)', DEMO_B: 'Demo sxem B (rəsmi deyil)', DEMO_C: 'Demo sxem C (rəsmi deyil)', B747_8F: 'B747-8F · LIR nümunəsi (rəsmi deyil)' },
     rows: { MAIN_R: 'Əsas göyərtə · sağ tərəf', MAIN_L: 'Əsas göyərtə · sol tərəf', MAIN: 'Əsas göyərtə', LOWER: 'Alt göyərtə' },
   },
 
@@ -46,11 +46,15 @@ export const AZ = {
   },
   lir: {
     summary: 'Telejkalarda {a} · verilib {b} · telejkasız {c}',
-    legend: 'Yuxarıda: tiqrdən sayılmaqla telejka nömrəsi. Aşağıda: qrup nömrəsi. Kağız LIR-də olduğu kimi.',
+    legend: 'Kağız LIR kimi. Zolaq: qrup-sıra (məs. 136-1). ULD-yə toxun. İki barmaqla böyüt.',
     emptyPos: 'boş',
     noLir: 'Bu uçuş üçün LIR sxemi yüklənməyib.',
     edno: 'Edno {n}',
     rotate: 'Çevir',
+    fit: 'Sığdır',
+    zoomIn: 'Böyüt',
+    zoomOut: 'Kiçilt',
+    sheetLabel: 'LIR sxemi',
     nose: 'BURUN',
     tail: 'QUYRUQ',
   },

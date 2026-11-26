@@ -65,7 +65,7 @@ const TAB_ORDER = ['flights', 'lir', 'dollies', 'search', 'load'];
 /* ---------- state ---------- */
 let store;
 let storageKind = 'memory';
-let ui = { tab: 'flights', orient: 'v', flightId: null, sheet: null, q: '', logAll: false, pending: null };
+let ui = { tab: 'flights', rot: null, zoom: 1, flightId: null, sheet: null, q: '', logAll: false, pending: null };
 let toastTimer = null;
 
 function loadPrefs() {
@@ -73,14 +73,13 @@ function loadPrefs() {
     const p = JSON.parse(localStorage.getItem(PREF_KEY) || '{}');
     if (p.tab && TAB_ORDER.includes(p.tab)) ui.tab = p.tab;
     if (p.flightId) ui.flightId = p.flightId;
-    if (p.orient === 'h' || p.orient === 'v') ui.orient = p.orient;
   } catch (e) {
     /* prefs are a convenience only */
   }
 }
 function savePrefs() {
   try {
-    localStorage.setItem(PREF_KEY, JSON.stringify({ tab: ui.tab, flightId: ui.flightId, orient: ui.orient }));
+    localStorage.setItem(PREF_KEY, JSON.stringify({ tab: ui.tab, flightId: ui.flightId }));
   } catch (e) {
     /* ignore */
   }
@@ -217,35 +216,46 @@ function viewFlights() {
   return h;
 }
 
-function lirCellHtml(flightId, code, label, style) {
-  const cell = Q.lirCell(st(), flightId, code);
-  const shown = label || code;
-  const sty = style ? ` style="${style}"` : '';
-  if (cell.empty) {
-    return `<div class="lc empty"${sty}><span class="code">${esc(shown)}</span><span class="top"></span><span class="uld">${S.lir.emptyPos}</span><span class="bot"></span></div>`;
-  }
+/* ---------- LIR sheet: drawn like the paper, rotate and zoom like a PDF viewer ---------- */
+const ZOOM_MAX = 6;
+const portrait = () => window.innerHeight > window.innerWidth;
+// Rotation: by default the sheet is turned so it fills the screen (landscape sheet on a portrait phone -> turned 90 degrees).
+// "Rotate" flips that choice; turning the phone puts it back to automatic.
+const effRot = () => (ui.rot === 0 || ui.rot === 90 ? ui.rot : portrait() ? 90 : 0);
+
+function uldBoxHtml(u) {
+  const { rect, cell } = u;
   const v = cell.view;
   const cls = v.status === ULD_STATUS.ON_DOLLY ? 'on' : v.status === ULD_STATUS.PRESENTED || v.status === ULD_STATUS.LOADED_CONFIRMED ? 'pres' : 'unk';
-  return `<button class="lc ${cls}"${sty} data-act="uld" data-id="${esc(v.id)}">
-    <span class="code">${esc(shown)}</span><span class="top">${esc(cell.top)}</span>
-    <span class="uld">${esc(shortUld(v.number))}</span><span class="bot">${esc(cell.bottom)}</span></button>`;
+  const pres = cls === 'pres';
+  const small = rect.h < 130;
+  const lines = [
+    `<span class="ut">${esc(v.type || '')}</span>`,
+    `<span class="un">${esc(shortUld(v.number))}</span>`,
+    v.weight != null && v.weight !== '' ? `<span class="uw">${esc(v.weight)}</span>` : '',
+    v.cat ? `<span class="uw">${esc(v.cat)}</span>` : '',
+    v.dest ? `<span class="uw">${esc(v.dest)}</span>` : '',
+    v.via && !small ? `<span class="uw">${esc(v.via)}</span>` : '',
+  ].join('');
+  const showLabel = !u.custom || u.showLabel;
+  const band = cell.label ? `<span class="band">${pres ? '✓ ' : ''}${esc(cell.label)}</span>` : '';
+  const style = `left:${rect.x}px;top:${rect.y}px;width:${rect.w + 1}px;height:${rect.h + 1}px`;
+  return `<button class="ub ${cls}${u.custom ? ' cx' : ''}${rect.w < 70 ? ' nar' : ''}" style="${style}" data-act="uld" data-id="${esc(v.id)}" aria-label="${esc(u.label)} ${esc(v.number)}">${showLabel ? `<i>${esc(u.label)}</i>` : ''}${lines}${band}</button>`;
 }
 
-function deckHtml(f, deck) {
-  const horiz = ui.orient === 'h';
-  const cells = deck.cells
-    .map((c) => {
-      const rs = c.rowSpan || 1;
-      const cs = c.span || 1;
-      // Vertical = the same grid turned 90 degrees clockwise (nose up, right side on the right). Text is never rotated.
-      const style = horiz
-        ? `grid-row:${c.row} / span ${rs};grid-column:${c.col} / span ${cs}`
-        : `grid-row:${c.col} / span ${cs};grid-column:${deck.rows + 1 - (c.row + rs - 1)} / span ${rs}`;
-      return lirCellHtml(f.id, c.code, c.label, style);
-    })
-    .join('');
-  const tpl = horiz ? `grid-template-columns:repeat(${deck.cols},minmax(66px,1fr))` : `grid-template-columns:repeat(${deck.rows},1fr)`;
-  return `<div class="lr"><h3>${esc(S.layout.rows[deck.key] || deck.key)}</h3><div class="lscroll"><div class="lgrid ${horiz ? 'h' : 'v'}" style="${tpl};--cols:${deck.cols}">${cells}</div></div></div>`;
+function sheetHtml(v) {
+  const sh = v.sheet;
+  let h = `<div class="ls" id="ls" data-w="${sh.w}" data-h="${sh.h}" data-rot="${effRot()}" style="width:${sh.w}px;height:${sh.h}px">`;
+  const ownLabel = new Set(v.ulds.filter((u) => u.custom && u.showLabel).map((u) => u.code)); // that box draws the label itself
+  for (const c of sh.cells) {
+    h += `<div class="gc${c.bulk ? ' bulk' : ''}" style="left:${c.x}px;top:${c.y}px;width:${c.w + 1}px;height:${c.h + 1}px">${ownLabel.has(c.code) ? '' : `<i>${esc(c.label || c.code)}</i>`}${c.bulk ? '<b>BLK</b>' : ''}</div>`;
+  }
+  for (const u of v.ulds) h += uldBoxHtml(u);
+  if (sh.payload) {
+    const p = sh.payload;
+    h += `<div class="pay" style="left:${p.x}px;top:${p.y}px;width:${p.w}px"><b>Total Payload</b><table><tr><th>Weight, kg</th><th>Index</th></tr><tr><td>${v.totalKg == null ? '—' : v.totalKg}</td><td>—</td></tr></table></div>`;
+  }
+  return h + '</div>';
 }
 
 function viewLir(f) {
@@ -253,19 +263,64 @@ function viewLir(f) {
   const c = Q.counts(st(), f.id);
   const layout = f.lir.layout;
   const title = (layout.key && S.layout.titles[layout.key]) || layout.title;
-  let h = `<div class="sumline"><span class="chip c-dolly">${t(S.lir.summary, { a: c.onDolly, b: c.presented, c: c.noDolly })}</span><span class="chip c-none">${t(S.lir.edno, { n: f.lir.edno })} · ${esc(title)}</span></div>`;
-  h += `<div class="lirbar"><p class="legend" style="margin:0">${S.lir.legend}</p><button class="btn sm" data-act="rotate">⟳ ${S.lir.rotate}</button></div>`;
-  if (layout.decks) {
-    const horiz = ui.orient === 'h';
-    h += `<div class="axis ${horiz ? 'h' : 'v'}"><span>${horiz ? '◀ ' : '▲ '}${S.lir.nose}</span></div>`;
-    for (const deck of layout.decks) h += deckHtml(f, deck);
-    h += `<div class="axis ${horiz ? 'h' : 'v'}"><span>${S.lir.tail}${horiz ? ' ▶' : ' ▼'}</span></div>`;
-    return h;
-  }
-  for (const row of layout.rows) {
-    h += `<div class="lr"><h3>${esc((row.key && S.layout.rows[row.key]) || row.name)}</h3><div class="lrow">${row.codes.map((code) => lirCellHtml(f.id, code)).join('')}</div></div>`;
-  }
+  const v = Q.lirSheetView(st(), f.id);
+  let h = `<div class="lirtop"><span class="chip c-dolly">${t(S.lir.summary, { a: c.onDolly, b: c.presented, c: c.noDolly })}</span><span class="chip c-none">${t(S.lir.edno, { n: f.lir.edno })}</span></div>`;
+  h += `<div class="sheetouter"><div class="lirtools" role="toolbar" aria-label="${S.lir.sheetLabel}">
+    <button class="btn sm" data-act="rotate" aria-label="${S.lir.rotate}">⟳<span>${S.lir.rotate}</span></button>
+    <button class="btn sm" data-act="zoomOut" aria-label="${S.lir.zoomOut}">−</button>
+    <button class="btn sm" data-act="zoomIn" aria-label="${S.lir.zoomIn}">+</button>
+    <button class="btn sm" data-act="fit" aria-label="${S.lir.fit}">⤢<span>${S.lir.fit}</span></button>
+  </div><div class="sheetwrap" id="sw"><div class="sheetbox" id="sb">${sheetHtml(v)}</div></div></div>`;
+  h += `<p class="legend lirleg"><b>${esc(title)}.</b> ${S.lir.legend}</p>`;
   return h;
+}
+
+/**
+ * Size and place the sheet. overview = the whole page on the screen. base = what we show at zoom 1: the overview, unless that
+ * would be too small to read (a turned sheet on a narrow phone), then the width of the screen. The zoom multiplies base.
+ */
+function layoutSheet(focus) {
+  const wrap = $('sw');
+  const box = $('sb');
+  const el = $('ls');
+  if (!wrap || !box || !el || !wrap.clientWidth || !wrap.clientHeight) return;
+  const w0 = +el.dataset.w;
+  const h0 = +el.dataset.h;
+  const rot = effRot();
+  el.dataset.rot = String(rot);
+  const dw = rot ? h0 : w0;
+  const dh = rot ? w0 : h0;
+  const pad = 8;
+  const wFit = (wrap.clientWidth - pad * 2) / dw;
+  const overview = Math.min(wFit, (wrap.clientHeight - pad * 2) / dh);
+  const base = overview >= 0.5 ? overview : Math.min(wFit, 1);
+  const zmin = overview / base;
+  ui.zoom = Math.max(zmin, Math.min(ZOOM_MAX, ui.zoom));
+  const sOld = +box.dataset.s || 0;
+  const s = base * ui.zoom;
+  box.dataset.s = String(s);
+  box.dataset.zmin = String(zmin);
+  box.style.width = Math.round(dw * s) + 'px';
+  box.style.height = Math.round(dh * s) + 'px';
+  el.style.transform = rot ? `translate(${h0 * s}px,0) rotate(90deg) scale(${s})` : `scale(${s})`;
+  if (focus && sOld) {
+    // keep the point under the fingers where it was
+    const u = { x: (wrap.scrollLeft + focus.x - focus.ox) / sOld, y: (wrap.scrollTop + focus.y - focus.oy) / sOld };
+    wrap.scrollLeft = u.x * s + box.offsetLeft - focus.x;
+    wrap.scrollTop = u.y * s + box.offsetTop - focus.y;
+  }
+}
+function setZoom(z, focusPoint) {
+  const wrap = $('sw');
+  const box = $('sb');
+  const nz = Math.max(+(box && box.dataset.zmin) || 1, Math.min(ZOOM_MAX, z));
+  if (nz === ui.zoom) return;
+  const r = wrap ? wrap.getBoundingClientRect() : null;
+  const focus = r && box
+    ? { x: (focusPoint ? focusPoint.x : r.left + r.width / 2) - r.left, y: (focusPoint ? focusPoint.y : r.top + r.height / 2) - r.top, ox: box.offsetLeft, oy: box.offsetTop }
+    : null;
+  ui.zoom = nz;
+  layoutSheet(focus);
 }
 
 function unitCellHtml(u) {
@@ -592,8 +647,12 @@ function render() {
   else if (ui.tab === 'dollies') h = viewDollies(f);
   else if (ui.tab === 'search') h = viewSearch(f);
   else if (ui.tab === 'load') h = viewLoad(f);
+  const lirMode = ui.tab === 'lir' && !!f && !!f.lir;
+  m.classList.toggle('lirmode', lirMode);
+  $('app').classList.toggle('wide', lirMode);
   m.innerHTML = h;
-  m.scrollTop = keep;
+  m.scrollTop = lirMode ? 0 : keep;
+  if (lirMode) { layoutSheet(); requestAnimationFrame(() => layoutSheet()); }
   if (ui.sheet) renderSheet();
 }
 
@@ -620,7 +679,10 @@ const A = {
   openFlight(d) { ui.flightId = d.id; ui.tab = 'lir'; ui.q = ''; savePrefs(); $('main').scrollTop = 0; render(); },
   goDollies() { ui.tab = 'dollies'; savePrefs(); render(); },
   menu() { openSheet({ t: 'menu' }); },
-  rotate() { ui.orient = ui.orient === 'v' ? 'h' : 'v'; savePrefs(); render(); },
+  rotate() { ui.rot = effRot() === 90 ? 0 : 90; ui.zoom = 1; render(); },
+  zoomIn() { setZoom(ui.zoom * 1.4); },
+  zoomOut() { setZoom(ui.zoom / 1.4); },
+  fit() { ui.zoom = 1; layoutSheet(); const w = $('sw'); if (w) { w.scrollLeft = 0; w.scrollTop = 0; } },
   lang(d) { setLang(d.lang); render(); },
   closeSheet,
   uld(d) { openSheet({ t: 'uld', id: d.id }); },
@@ -739,12 +801,38 @@ setInterval(() => {
   if (v.status === 'IN_PROGRESS') el.textContent = fmtClock(Date.now() - v.startedAt);
 }, 1000);
 
+/* ---------- pinch to zoom on the LIR sheet ---------- */
+(function pinchSetup() {
+  let p = null;
+  const dist = (ts) => Math.hypot(ts[0].clientX - ts[1].clientX, ts[0].clientY - ts[1].clientY);
+  const mid = (ts) => ({ x: (ts[0].clientX + ts[1].clientX) / 2, y: (ts[0].clientY + ts[1].clientY) / 2 });
+  const inSheet = (e) => { const w = $('sw'); return !!w && w.contains(e.target); };
+  document.addEventListener('touchstart', (e) => {
+    if (e.touches.length === 2 && inSheet(e)) p = { d: dist(e.touches), z: ui.zoom };
+  }, { passive: true });
+  document.addEventListener('touchmove', (e) => {
+    if (!p || e.touches.length !== 2) return;
+    if (e.cancelable) e.preventDefault();
+    setZoom(p.z * (dist(e.touches) / p.d), mid(e.touches));
+  }, { passive: false });
+  document.addEventListener('touchend', (e) => { if (e.touches.length < 2) p = null; }, { passive: true });
+  document.addEventListener('touchcancel', () => { p = null; }, { passive: true });
+})();
+let lastPortrait = portrait();
+window.addEventListener('resize', () => {
+  if (portrait() !== lastPortrait) { lastPortrait = portrait(); ui.rot = null; ui.zoom = 1; } // phone turned: automatic again
+  layoutSheet();
+});
+
 /* ---------- start ---------- */
 async function main() {
   loadPrefs();
   const storage = await pickStorage();
   storageKind = storage.kind || 'memory';
   store = await openStore({ storage });
+  const fl = Object.values(store.getState().flights);
+  const legacyDemo = fl.length && fl.every((x) => !x.lir || x.lir.demo) && fl.some((x) => x.lir && x.lir.layout && x.lir.layout.decks);
+  if (legacyDemo) { await store.reset(); } // demo data from an older version: replace with the current demo (no real data is ever dropped)
   if (!Object.keys(store.getState().flights).length) seedDemo(store);
   curFlight();
   render();

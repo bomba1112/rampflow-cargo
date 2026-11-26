@@ -1,36 +1,58 @@
 // Demo data. Entirely fictional: flight numbers DM###, ULD numbers end in ZZ, layouts are NOT official load plans.
 
 import { T, ULD_STATUS, LOCATION } from './model.js';
+import { LAYOUT_B747_8F, codesOf } from './layouts.js';
 
 const MIN = 60000;
 const slot = (groupId, n) => ({ kind: 'slot', id: `${groupId}:${n}` });
 
-// 747F-style demo layout. Cells sit on a grid: row 1 = right side, row 2 = left side, col 1 = nose.
-// span:2 means one big unit over two columns (e.g. ER/FR). NOT an official load plan.
-const mainCells = [];
-const addPair = (col, letters, span = 1, label) => {
-  mainCells.push({ code: letters + 'R', row: 1, col, span, label: label && label + 'R' });
-  mainCells.push({ code: letters + 'L', row: 2, col, span, label: label && label + 'L' });
-};
-addPair(1, 'A'); addPair(2, 'B'); addPair(3, 'C'); addPair(4, 'D');
-mainCells.push({ code: 'ER', row: 1, col: 5, span: 2, label: 'ER/FR' }, { code: 'EL', row: 2, col: 5, span: 2, label: 'EL/FL' });
-mainCells.push({ code: 'GR', row: 1, col: 7, span: 2, label: 'GR/HR' }, { code: 'GL', row: 2, col: 7, span: 2, label: 'GL/HL' });
-addPair(9, 'J'); addPair(10, 'K'); addPair(11, 'L'); addPair(12, 'M'); addPair(13, 'P');
-mainCells.push({ code: 'R', row: 1, col: 14, span: 1, rowSpan: 2 });
-const lowerCols = [['11P', 1], ['12P', 2], ['13P', 3], ['21P', 4], ['22P', 5], ['23P', 6], ['31P', 8], ['32P', 9], ['41P', 11], ['42P', 12]];
-const LAYOUT_747 = {
-  key: 'DEMO_C',
-  title: 'Демо-схема C (не официальная)',
-  decks: [
-    { key: 'MAIN', rows: 2, cols: 14, cells: mainCells },
-    { key: 'LOWER', rows: 1, cols: 12, cells: lowerCols.map(([code, col]) => ({ code, row: 1, col, span: 1 })) },
-  ],
-};
+export { codesOf };
 
-/** All position codes of a layout, in reading order (old row layouts and new deck layouts). */
-export function codesOf(layout) {
-  if (layout.decks) return layout.decks.flatMap((d) => d.cells.slice().sort((a, b) => a.row - b.row || a.col - b.col).map((c) => c.code));
-  return layout.rows.flatMap((r) => r.codes);
+// DM101 mirrors the occupancy pattern of a real LIR of this aircraft type (which cells are used, which units are
+// double-width, which stand across the centre line). Numbers, weights and destinations are made up.
+// box = where the unit is drawn when it is not exactly inside its cell. covers = the extra cell it also occupies.
+const DM101_SPEC = [
+  // right side (top row on paper)
+  { code: 'AR' }, { code: 'BR' },
+  { code: 'ER', type: 'PGA', covers: ['FR'], box: { x: 346, y: 27, w: 157, h: 110 } },
+  { code: 'GR', type: 'PGA', covers: ['HR'], box: { x: 512, y: 27, w: 157, h: 110 } },
+  { code: 'JR' }, { code: 'KR' }, { code: 'LR' }, { code: 'PR' }, { code: 'R' },
+  // left side (bottom row on paper)
+  { code: 'AL' }, { code: 'BL' },
+  { code: 'CL', box: { x: 176, y: 99, w: 83, h: 110 }, showLabel: true },
+  { code: 'DL', box: { x: 259, y: 99, w: 82, h: 110 }, showLabel: true },
+  { code: 'EL', type: 'PGA', covers: ['FL'], box: { x: 346, y: 171, w: 157, h: 110 } },
+  { code: 'GL', type: 'PRA', covers: ['HL'], box: { x: 526, y: 171, w: 129, h: 110 } },
+  { code: 'JL' }, { code: 'KL' }, { code: 'LL' },
+  { code: 'ML', box: { x: 930, y: 99, w: 83, h: 110 }, showLabel: true },
+  { code: 'PL' },
+  // lower deck
+  { code: '11P' }, { code: '12P' }, { code: '13P' }, { code: '21P' }, { code: '22P' }, { code: '23P' },
+  { code: '31P' }, { code: '32P' }, { code: '41P' }, { code: '42P' },
+];
+const CATS = ['Q4', 'Q5', 'Q6', 'Q7', 'S5'];
+
+function dm101Positions(flightId, numbers) {
+  return DM101_SPEC.map((sp, i) => {
+    const type = sp.type || 'PMC';
+    const number = type + numbers[i].replace(/^[A-Z]{3}/, '');
+    const wide = sp.type === 'PGA' || sp.type === 'PRA';
+    return {
+      code: sp.code,
+      covers: sp.covers,
+      box: sp.box,
+      showLabel: sp.showLabel,
+      uld: {
+        id: `u-${flightId}-${sp.code}`,
+        number,
+        type,
+        weight: wide ? 4000 + ((i * 377) % 1300) : 900 + ((i * 377) % 2600),
+        dest: 'DEM',
+        cat: wide ? 'S5' : CATS[i % 4],
+        via: i % 5 === 3 ? 'TRX' : '',
+      },
+    };
+  });
 }
 
 const LAYOUT_B = {
@@ -77,7 +99,7 @@ export function seedDemo(store, nowMs = Date.now()) {
   emit(T.FLIGHT_CREATED, 'f-dm303', { flightId: 'f-dm303', number: 'DM303', date: date - 86400000, aircraftType: 'B747-8F', stand: 'C2' }, 1700);
 
   const a = Array.from({ length: 40 }, (_, i) => `PMC${i === 0 ? 10417 : 10000 + ((10417 + i * 8231) % 80000)}ZZ`);
-  emit(T.LIR_LOADED, 'f-dm101', { flightId: 'f-dm101', edno: 2, layout: LAYOUT_747, demo: true, positions: uldList('f-dm101', a, LAYOUT_747, ['DR', 'MR', 'DL', '23P']) }, 190);
+  emit(T.LIR_LOADED, 'f-dm101', { flightId: 'f-dm101', edno: 2, layout: LAYOUT_B747_8F, demo: true, positions: dm101Positions('f-dm101', a) }, 190);
 
   const b = ['PMC20518ZZ', 'PMC37741ZZ', 'PMC48026ZZ', 'PMC55913ZZ', 'PMC69354ZZ', 'PMC71287ZZ'];
   emit(T.LIR_LOADED, 'f-dm202', { flightId: 'f-dm202', edno: 1, layout: LAYOUT_B, demo: true, positions: uldList('f-dm202', b, LAYOUT_B) }, 190);
@@ -94,7 +116,7 @@ export function seedDemo(store, nowMs = Date.now()) {
   const link = (uld, groupId, n, ago) => emit(T.ULD_LINKED, uld, { uldId: uld, dolly: slot(groupId, n) }, ago);
   link('u-f-dm101-AR', g136, 1, 118);
   link('u-f-dm101-BR', g136, 2, 117);
-  link('u-f-dm101-CR', g136, 3, 116);
+  link('u-f-dm101-BL', g136, 3, 116);
   link('u-f-dm101-AL', g136, 4, 115);
   emit(T.DOLLY_GROUP_CREATED, g007, { groupId: g007, flightId: 'f-dm101', number: '007', dupIndex: 1 }, 100);
   link('u-f-dm101-11P', g007, 1, 98);

@@ -1,6 +1,7 @@
 // Read-only views over the state. Everything the UI shows comes from here.
 
 import { ULD_STATUS, LOCATION, getDolly } from './model.js';
+import { sheetOf } from './layouts.js';
 
 const norm = (s) => String(s == null ? '' : s).toUpperCase().replace(/\s+/g, '');
 
@@ -91,6 +92,8 @@ export function uldView(state, uldId) {
     type: u.type,
     weight: u.weight,
     dest: u.dest,
+    cat: u.cat,
+    via: u.via,
     positionCode: u.positionCode,
     status: u.status,
     dolly, // current dolly, if on one
@@ -112,11 +115,38 @@ export function lirCell(state, flightId, code) {
   const unit = view.status === ULD_STATUS.ON_DOLLY ? view.dolly : view.status === ULD_STATUS.PRESENTED ? view.lastDolly : null;
   let top = '';
   let bottom = '';
+  let label = '';
   if (unit) {
     top = unit.kind === 'slot' ? String(unit.ordinal) : '20ft';
     bottom = unit.number + (unit.dupIndex > 1 ? `(${unit.dupIndex})` : '');
+    label = unit.label + (unit.dupIndex > 1 ? `(${unit.dupIndex})` : '');
   }
-  return { code, empty: false, view, top, bottom };
+  return { code, empty: false, view, top, bottom, label };
+}
+
+/**
+ * Everything the screen needs to draw the LIR like the paper: the fixed cell grid, and each ULD with the rectangle it is drawn in.
+ * A ULD is drawn in its own cell unless the position carries a box (double-width unit, unit across the centre line).
+ */
+export function lirSheetView(state, flightId) {
+  const f = state.flights[flightId];
+  if (!f || !f.lir) return null;
+  const sheet = sheetOf(f.lir.layout);
+  const byCode = new Map(sheet.cells.map((c) => [c.code, c]));
+  const ulds = [];
+  let totalKg = 0;
+  let weightsKnown = true;
+  for (const pos of Object.values(state.positions)) {
+    if (pos.flightId !== flightId || !pos.uldId) continue;
+    const geo = byCode.get(pos.code);
+    const rect = pos.box || (geo ? { x: geo.x, y: geo.y, w: geo.w, h: geo.h } : null);
+    if (!rect) continue; // a position that is not on this sheet: nothing to draw
+    const cell = lirCell(state, flightId, pos.code);
+    ulds.push({ code: pos.code, label: geo && geo.label ? geo.label : pos.code, rect, custom: !!pos.box, showLabel: pos.showLabel, cell });
+    if (typeof cell.view.weight === 'number') totalKg += cell.view.weight;
+    else weightsKnown = false;
+  }
+  return { sheet, ulds, totalKg: weightsKnown && ulds.length ? totalKg : null };
 }
 
 export function counts(state, flightId) {

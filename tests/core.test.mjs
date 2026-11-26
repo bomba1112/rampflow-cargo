@@ -408,3 +408,55 @@ test('extra: a presented ULD cannot be silently re-linked', async () => {
   assert.ok(c.store.run(C.linkUld, { uldId: 'u-AL', dolly: slotRef(gid, 2), confirmed: true }).ok);
   assert.equal(Q.uldView(c.store.getState(), 'u-AL').status, ULD_STATUS.ON_DOLLY);
 });
+
+// ---- LIR sheet: geometry of the paper layout ----
+import { LAYOUT_B747_8F, sheetOf, codesOf } from '../src/core/layouts.js';
+
+test('LIR 1. B747-8F template: cell grid as measured on the paper LIR (39 cells, no overlaps, unique codes)', () => {
+  const cells = LAYOUT_B747_8F.sheet.cells;
+  assert.equal(cells.length, 39);
+  assert.equal(new Set(cells.map((x) => x.code)).size, 39);
+  const by = Object.fromEntries(cells.map((x) => [x.code, x]));
+  assert.deepEqual([by.AR.x, by.AR.y, by.AR.w, by.AR.h], [10, 5, 82, 143]);
+  assert.deepEqual([by.AL.x, by.AL.y], [10, 148]); // left side is the bottom row
+  assert.deepEqual([by.R.x, by.R.y, by.R.w, by.R.h], [1096, 5, 64, 287]); // one tall position at the tail
+  assert.equal(by.MR.x - (by.LR.x + by.LR.w), 8); // the gap between L and M
+  assert.deepEqual([by['11P'].x, by['11P'].y, by['11P'].h], [19, 302, 162]);
+  assert.ok(by['51'].bulk && by['52'].bulk);
+  // nothing overlaps (touching edges are fine)
+  for (let i = 0; i < cells.length; i++) for (let j = i + 1; j < cells.length; j++) {
+    const a = cells[i]; const b = cells[j];
+    const ox = Math.min(a.x + a.w, b.x + b.w) - Math.max(a.x, b.x);
+    const oy = Math.min(a.y + a.h, b.y + b.h) - Math.max(a.y, b.y);
+    assert.ok(!(ox > 0 && oy > 0), `${a.code} overlaps ${b.code}`);
+  }
+  // bulk compartments hold no ULD; everything else can
+  assert.equal(codesOf(LAYOUT_B747_8F).length, 37);
+  assert.ok(!codesOf(LAYOUT_B747_8F).includes('51'));
+});
+
+test('LIR 2. older layouts (rows, decks) become the same sheet shape', () => {
+  const rows = { rows: [{ key: 'MAIN', name: 'x', codes: ['AL', 'AR'] }, { key: 'LOWER', name: 'y', codes: ['11P'] }] };
+  const s = sheetOf(rows);
+  assert.equal(s.cells.length, 3);
+  assert.ok(s.w >= 400 && s.h > 100);
+  const decks = { decks: [{ key: 'MAIN', rows: 2, cols: 2, cells: [{ code: 'AR', row: 1, col: 1, span: 1 }, { code: 'AL', row: 2, col: 1, span: 1 }] }] };
+  assert.deepEqual(codesOf(decks), ['AR', 'AL']);
+});
+
+test('LIR 3. demo DM101 draws double-width and centre-line units in their own boxes; total weight adds up', async () => {
+  const c = await mk();
+  seedDemo(c.store, c.now());
+  const v = Q.lirSheetView(c.store.getState(), 'f-dm101');
+  assert.equal(v.ulds.length, 30);
+  const er = v.ulds.find((u) => u.code === 'ER');
+  assert.ok(er.custom && er.rect.w > 150, 'PGA over ER/FR is one wide box');
+  const cl = v.ulds.find((u) => u.code === 'CL');
+  assert.ok(cl.custom && cl.showLabel && cl.rect.y < 148 && cl.rect.y + cl.rect.h > 148, 'unit across the centre line');
+  const ar = v.ulds.find((u) => u.code === 'AR');
+  assert.ok(!ar.custom && ar.rect.x === 10 && ar.rect.w === 82, 'plain unit sits in its own cell');
+  assert.equal(ar.cell.label, '136-1'); // dolly shown on the band
+  assert.equal(v.totalKg, v.ulds.reduce((s, u) => s + u.cell.view.weight, 0));
+  // the sheet for an old-style demo flight still works
+  assert.ok(Q.lirSheetView(c.store.getState(), 'f-dm202').ulds.length > 0);
+});
