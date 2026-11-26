@@ -158,6 +158,13 @@ await step('tapping a ULD on the sheet opens its card', async () => {
   assert.match(q('#sheet').textContent, /ER/);
   click(q('#sheet [data-act="closeSheet"]')); await wait();
 });
+await step('flights tab has the open-LIR-file button and a hidden PDF input', async () => {
+  tab('flights'); await wait();
+  assert.ok(q('[data-act="pickFile"]'));
+  const inp = q('#lirfile');
+  assert.ok(inp && /pdf/.test(inp.accept));
+  click(q('[data-act="pickFile"]')); // must not throw
+});
 await step('no runtime errors', () => assert.deepEqual(errors, []));
 
 let bad = 0;

@@ -182,4 +182,15 @@ main.lirmode{display:flex;flex-direction:column;overflow:hidden;padding:8px}
   .lirtools .btn{flex:none;min-width:0;padding:0;min-height:52px}
   .lirtools .btn span{display:none}
 }
-
+/* original LIR page with tap areas */
+.ls.pg{background:#fff}
+.pgimg{position:absolute;left:0;top:0;width:100%;height:100%;user-select:none;-webkit-user-drag:none;pointer-events:none}
+.zn{position:absolute;box-sizing:border-box;margin:0;padding:0;border:0;background:transparent;border-radius:0;-webkit-appearance:none;appearance:none}
+.zn.on{background:rgba(10,88,168,.18);box-shadow:inset 0 0 0 2px #0A58A8}
+.zn.pres{background:rgba(255,170,0,.30);box-shadow:inset 0 0 0 2px #8F4A00}
+.zn.unk{outline:2px dashed #333;outline-offset:-3px}
+.zn:active{background:rgba(255,196,0,.40)}
+.zn .band{position:absolute;left:0;right:0;bottom:0;height:20px;font:800 15px/20px Arial,Helvetica,sans-serif;color:#fff;background:#0A58A8;text-align:center;white-space:nowrap}
+.zn.pres .band{background:#8F4A00}
+.lbl{display:block;font-size:14px;font-weight:600;color:var(--muted);margin:4px 2px}
+.lbl input{display:block;width:100%;margin-top:4px;min-height:54px;font-size:20px;font-weight:700;border:2px solid var(--ink);border-radius:12px;padding:0 12px;background:#fff;color:var(--ink);text-transform:uppercase}

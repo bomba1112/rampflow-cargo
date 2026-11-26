@@ -31,6 +31,9 @@ function buildB747_8F() {
     key: 'B747_8F',
     title: 'B747-8F',
     sheet: { w: 1170, h: 470, cells, payload: { x: 475, y: 349, w: 161, rowH: 20 } },
+    // Where this sheet sits on the original PDF page (points): the picture starts at (ox, oy) and is a bit smaller than sheet units.
+    // The app shows the page from cropTop down cropH points, and puts the tap areas on top of it.
+    page: { w: 1180, h: 834, cropTop: 125, cropH: 487, ox: 10, oy: 136, sx: 1162 / 1170, sy: 467 / 470 },
   };
 }
 export const LAYOUT_B747_8F = buildB747_8F();
@@ -64,4 +67,11 @@ export function sheetOf(layout) {
 /** Position codes that can hold a ULD, in reading order. */
 export function codesOf(layout) {
   return sheetOf(layout).cells.filter((c) => !c.bulk).map((c) => c.code);
+}
+
+/** A cell as a rectangle on the cropped original page (points, origin = top-left of the crop). Null if the layout has no page mapping. */
+export function pageRect(layout, cell) {
+  const p = layout.page;
+  if (!p) return null;
+  return { x: p.ox + cell.x * p.sx, y: p.oy + cell.y * p.sy - p.cropTop, w: cell.w * p.sx, h: cell.h * p.sy };
 }

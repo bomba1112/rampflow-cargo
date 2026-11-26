@@ -26,6 +26,9 @@ html = html
 writeFileSync(`${out}/index.html`, html);
 if (!single) {
   cpSync('public', out, { recursive: true });
+  // PDF reader for opening a LIR file on the phone (loaded only when a file is opened; the legacy build runs on older phones)
+  mkdirSync(`${out}/vendor`, { recursive: true });
+  for (const f of ['pdf.min.mjs', 'pdf.worker.min.mjs']) cpSync(`node_modules/pdfjs-dist/legacy/build/${f}`, `${out}/vendor/${f}`);
   writeFileSync(`${out}/.nojekyll`, '');
 }
 console.log(`${out}/index.html  ${(html.length / 1024).toFixed(1)} KB`);

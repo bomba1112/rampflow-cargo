@@ -6,11 +6,47 @@
 // The store turns the events into full event records (id, times, actor).
 
 import { T, ULD_STATUS, LOCATION, getDolly } from './model.js';
+import { codesOf } from './layouts.js';
 
 const ok = (events) => ({ ok: true, events });
 const fail = (code, data) => ({ ok: false, error: { code, data } });
 const need = (code, data) => ({ ok: false, confirm: { code, data } });
 const ev = (eventType, aggregateId, payload) => ({ eventType, aggregateId, payload });
+
+/**
+ * A LIR file was opened. New flight (number + date) -> flight with an empty LIR page. The same flight again
+ * (a newer edition) -> only the edition changes, nothing already marked is lost.
+ */
+export function importLirPage(state, { number, date, aircraftType, stand, edno, reg, route, std, layout }, ctx) {
+  const n = normalizeNumber(number);
+  if (!n) return fail('INVALID_NUMBER');
+  if (!layout) return fail('NO_LAYOUT');
+  const day = typeof date === 'number' && Number.isFinite(date) ? date : ctx.now();
+  const same = Object.values(state.flights).find((f) => f.number === n && f.date === day);
+  if (same) {
+    if (same.lir && same.lir.edno === edno) return fail('SAME_EDITION', { flightId: same.id });
+    return ok([ev(T.LIR_REVISED, same.id, { flightId: same.id, edno })]);
+  }
+  const flightId = ctx.newId();
+  return ok([
+    ev(T.FLIGHT_CREATED, flightId, { flightId, number: n, date: day, aircraftType: aircraftType || layout.title || '', stand: stand || '', reg: reg || '', route: route || '', std: std || '' }),
+    ev(T.LIR_LOADED, flightId, { flightId, edno: edno || 1, layout, demo: false, page: true, positions: [] }),
+  ]);
+}
+
+/** Mark a position on the LIR page as holding a ULD. The number is optional. */
+export function registerUld(state, { flightId, code, number }, ctx) {
+  const f = state.flights[flightId];
+  if (!f || !f.lir) return fail('NO_FLIGHT');
+  if (typeof code !== 'string' || !code) return fail('NOT_FOUND');
+  if (f.lir.layout && !codesOf(f.lir.layout).includes(code)) return fail('NOT_FOUND');
+  const pos = state.positions[`${flightId}:${code}`];
+  if (pos && pos.uldId) return fail('ALREADY_REGISTERED', { uldId: pos.uldId });
+  const num = String(number == null ? '' : number).trim().toUpperCase().replace(/\s+/g, '');
+  if (num && !/^[A-Z0-9]{3,12}$/.test(num)) return fail('INVALID_NUMBER');
+  const uldId = `u-${flightId}-${code}`;
+  return ok([ev(T.ULD_REGISTERED, uldId, { flightId, code, uldId, number: num })]);
+}
 
 /** Group / dolly numbers are strings. Keeps leading zeros. Returns null if invalid. */
 export function normalizeNumber(raw) {

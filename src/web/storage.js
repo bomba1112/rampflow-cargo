@@ -10,8 +10,12 @@ const LS_KEY = 'rampflow.events.v1';
 function idbStorage() {
   const open = () =>
     new Promise((resolve, reject) => {
-      const req = indexedDB.open(DB, 1);
-      req.onupgradeneeded = () => req.result.createObjectStore(STORE, { autoIncrement: true });
+      const req = indexedDB.open(DB, 2); // v2 adds the 'files' store (see files.js); the events store is untouched
+      req.onupgradeneeded = () => {
+        const db = req.result;
+        if (!db.objectStoreNames.contains(STORE)) db.createObjectStore(STORE, { autoIncrement: true });
+        if (!db.objectStoreNames.contains('files')) db.createObjectStore('files');
+      };
       req.onsuccess = () => resolve(req.result);
       req.onerror = () => reject(req.error);
       req.onblocked = () => reject(new Error('blocked'));

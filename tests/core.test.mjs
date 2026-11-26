@@ -6,6 +6,8 @@ import { seedDemo } from '../src/core/seed.js';
 import { T, ULD_STATUS, LOCATION } from '../src/core/model.js';
 import * as C from '../src/core/commands.js';
 import * as Q from '../src/core/selectors.js';
+import { LAYOUT_B747_8F, pageRect } from '../src/core/layouts.js';
+import { parseHeader, itemsToText } from '../src/web/lirfile.js';
 
 const MIN = 60000;
 
@@ -410,7 +412,7 @@ test('extra: a presented ULD cannot be silently re-linked', async () => {
 });
 
 // ---- LIR sheet: geometry of the paper layout ----
-import { LAYOUT_B747_8F, sheetOf, codesOf } from '../src/core/layouts.js';
+import { sheetOf, codesOf } from '../src/core/layouts.js';
 
 test('LIR 1. B747-8F template: cell grid as measured on the paper LIR (39 cells, no overlaps, unique codes)', () => {
   const cells = LAYOUT_B747_8F.sheet.cells;
@@ -459,4 +461,58 @@ test('LIR 3. demo DM101 draws double-width and centre-line units in their own bo
   assert.equal(v.totalKg, v.ulds.reduce((s, u) => s + u.cell.view.weight, 0));
   // the sheet for an old-style demo flight still works
   assert.ok(Q.lirSheetView(c.store.getState(), 'f-dm202').ulds.length > 0);
+});
+
+test('FILE 1. header text in scattered pdf.js order is read correctly (synthetic data)', () => {
+  const it = (str, x, y) => ({ str, transform: [1, 0, 0, 1, x, y] });
+  const items = [
+    it('Date:', 495, 790), it('01Jan2027', 541, 791), it('7L9801 (XY123)', 384, 790), it('Callsign (Flight Nbr.):', 219, 790),
+    it('A/C Reg:', 664, 790), it('ABCDE', 739, 791), it('ORIG - DEST:', 861, 790), it('GYD - BGW', 964, 791),
+    it('LOAD INSTRUCTION REPORT edno', 31, 819), it('7', 200, 819), it('STD (GMT):', 219, 756), it('02:30', 316, 755),
+  ];
+  const h = parseHeader(itemsToText(items));
+  assert.equal(h.number, 'XY123');
+  assert.equal(h.edno, 7);
+  assert.equal(h.reg, 'ABCDE');
+  assert.equal(h.route, 'GYD - BGW');
+  assert.equal(h.std, '02:30');
+  assert.equal(h.date, new Date(2027, 0, 1).getTime());
+  assert.deepEqual(parseHeader(''), { number: '', date: null, edno: null, reg: '', route: '', std: '' });
+});
+
+test('FILE 2. importLirPage: new flight, same edition refused, new edition revises; registerUld marks a position', async () => {
+  const c = await mk();
+  const args = { number: 'xy 123', date: 100, aircraftType: 'B747-8F', stand: 'C9', edno: 3, reg: 'ABCDE', route: 'A - B', std: '02:30', layout: LAYOUT_B747_8F };
+  const r = c.store.run(C.importLirPage, args);
+  assert.ok(r.ok);
+  const fid = r.events[0].payload.flightId;
+  const f = c.store.getState().flights[fid];
+  assert.equal(f.number, 'XY123');
+  assert.equal(f.lir.page, true);
+  assert.equal(f.reg, 'ABCDE');
+  assert.equal(c.store.run(C.importLirPage, args).error.code, 'SAME_EDITION');
+  const r2 = c.store.run(C.importLirPage, { ...args, edno: 4 });
+  assert.ok(r2.ok);
+  assert.equal(r2.events[0].eventType, T.LIR_REVISED);
+  assert.equal(c.store.getState().flights[fid].lir.edno, 4);
+  assert.equal(Object.keys(c.store.getState().flights).length, 1);
+
+  assert.equal(c.store.run(C.registerUld, { flightId: fid, code: 'ZZ', number: '' }).error.code, 'NOT_FOUND');
+  const u = c.store.run(C.registerUld, { flightId: fid, code: 'AR', number: ' pmc 46472ff ' });
+  assert.ok(u.ok);
+  const view = Q.lirCell(c.store.getState(), fid, 'AR');
+  assert.equal(view.empty, false);
+  assert.equal(view.view.number, 'PMC46472FF');
+  assert.equal(c.store.run(C.registerUld, { flightId: fid, code: 'AR', number: '' }).error.code, 'ALREADY_REGISTERED');
+  // a mark without a number is allowed
+  assert.ok(c.store.run(C.registerUld, { flightId: fid, code: 'BR', number: '' }).ok);
+  assert.equal(c.store.run(C.registerUld, { flightId: fid, code: 'CR', number: '!!' }).error.code, 'INVALID_NUMBER');
+});
+
+test('FILE 3. pageRect maps a template cell to page points inside the cropped picture', () => {
+  const cell = LAYOUT_B747_8F.sheet.cells.find((x) => x.code === 'AR');
+  const r = pageRect(LAYOUT_B747_8F, cell);
+  const p = LAYOUT_B747_8F.page;
+  assert.ok(r.x >= 0 && r.y >= 0 && r.x + r.w <= p.w && r.y + r.h <= p.cropH);
+  assert.equal(pageRect({ sheet: LAYOUT_B747_8F.sheet }, cell), null);
 });

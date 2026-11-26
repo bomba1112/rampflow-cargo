@@ -7,6 +7,9 @@ import { T, ULD_STATUS, LOCATION, undoneIds } from '../core/model.js';
 import * as C from '../core/commands.js';
 import * as Q from '../core/selectors.js';
 import { pickStorage } from '../web/storage.js';
+import { putFile, getFile, clearFiles } from '../web/files.js';
+import { readLirPdf } from '../web/lirfile.js';
+import { LAYOUT_B747_8F, pageRect, sheetOf } from '../core/layouts.js';
 import { S, t, setLang, getLang } from './strings.js';
 
 const TZ = 'Asia/Baku';
@@ -65,7 +68,8 @@ const TAB_ORDER = ['flights', 'lir', 'dollies', 'search', 'load'];
 /* ---------- state ---------- */
 let store;
 let storageKind = 'memory';
-let ui = { tab: 'flights', rot: null, zoom: 1, flightId: null, sheet: null, q: '', logAll: false, pending: null };
+const KNOWN_LAYOUTS = [LAYOUT_B747_8F];
+let ui = { pageUrls: {}, lirNew: null, tab: 'flights', rot: null, zoom: 1, flightId: null, sheet: null, q: '', logAll: false, pending: null };
 let toastTimer = null;
 
 function loadPrefs() {
@@ -99,7 +103,7 @@ function dollyText(ref) {
   const u = Q.dollyUnitOf(st(), ref);
   return u ? u.label + (u.dupIndex > 1 ? ` (${u.dupIndex})` : '') : '?';
 }
-const uldNo = (id) => (st().ulds[id] ? st().ulds[id].number : '?');
+const uldNo = (id) => (st().ulds[id] ? st().ulds[id].number || st().ulds[id].positionCode : '?');
 
 function describe(ev) {
   const p = ev.payload || {};
@@ -201,14 +205,14 @@ const dupSuffix = (n) => (n > 1 ? ' ' + t(S.dollies.dupTag, { n }) : '');
 function viewFlights() {
   const s = st();
   const flights = Object.values(s.flights).sort((a, b) => a.seq - b.seq);
-  let h = `<p class="hint">${S.flights.hint}</p>`;
+  let h = `<button class="btn primary" data-act="pickFile">${S.flights.openFile}</button><input type="file" id="lirfile" accept="application/pdf,.pdf" hidden><p class="hint">${S.flights.fileHint}</p><p class="hint">${S.flights.hint}</p>`;
   if (storageKind === 'memory') h += `<div class="warn">${S.sheet.storageMem}</div>`;
   for (const f of flights) {
     const c = Q.counts(s, f.id);
     const cls = f.status === 'LOADING' ? 'c-run' : f.status === 'DONE' ? 'c-done' : 'c-plan';
     h += `<button class="fcard ${f.id === ui.flightId ? 'sel' : ''}" data-act="openFlight" data-id="${esc(f.id)}">
       <span class="top"><span class="no">${esc(f.number)}</span><span class="chip ${cls}">${S.flightStatus[f.status]}</span></span>
-      <div class="meta">${t(S.flights.stand, { stand: esc(f.stand) })} · ${esc(f.aircraftType)} · ${fmtD(f.date)}</div>
+      <div class="meta">${f.stand ? t(S.flights.stand, { stand: esc(f.stand) }) + ' · ' : ''}${esc(f.aircraftType)}${f.reg ? ' · ' + esc(f.reg) : ''}${f.route ? ' · ' + esc(f.route) : ''} · ${fmtD(f.date)}</div>
       <div class="cnt">${t(S.flights.uldCount, c)}${f.lir ? ' · ' + t(S.lir.edno, { n: f.lir.edno }) : ''}</div>
       <div class="open"><span class="btn ${f.id === ui.flightId ? 'primary' : ''} sm">${f.id === ui.flightId ? S.flights.selected + ' · ' : ''}${S.flights.open}</span></div>
     </button>`;
@@ -258,20 +262,91 @@ function sheetHtml(v) {
   return h + '</div>';
 }
 
+/* ---------- the original LIR page (opened from the user's PDF) with tap areas on top ---------- */
+function ensurePage(f) {
+  const cur = ui.pageUrls[f.id];
+  if (cur !== undefined) return cur;
+  ui.pageUrls[f.id] = 'loading';
+  getFile(f.id).then((b) => {
+    ui.pageUrls[f.id] = b ? URL.createObjectURL(b) : 'missing';
+    if (ui.tab === 'lir') render();
+  });
+  return 'loading';
+}
+
+function pageSheetHtml(f, url) {
+  const layout = f.lir.layout;
+  const page = layout.page;
+  let h = `<div class="ls pg" id="ls" data-w="${page.w}" data-h="${page.cropH}" data-rot="${effRot()}" style="width:${page.w}px;height:${page.cropH}px"><img class="pgimg" src="${esc(url)}" alt="" draggable="false">`;
+  for (const cell of sheetOf(layout).cells) {
+    if (cell.bulk) continue;
+    const r = pageRect(layout, cell);
+    const c = Q.lirCell(st(), f.id, cell.code);
+    const style = `left:${r.x.toFixed(1)}px;top:${r.y.toFixed(1)}px;width:${r.w.toFixed(1)}px;height:${r.h.toFixed(1)}px`;
+    if (c.empty) {
+      h += `<button class="zn" style="${style}" data-act="pos" data-code="${esc(cell.code)}" aria-label="${esc(cell.code)}"></button>`;
+      continue;
+    }
+    const st0 = c.view.status;
+    const cls = st0 === ULD_STATUS.ON_DOLLY ? 'on' : st0 === ULD_STATUS.PRESENTED || st0 === ULD_STATUS.LOADED_CONFIRMED ? 'pres' : 'unk';
+    h += `<button class="zn ${cls}" style="${style}" data-act="uld" data-id="${esc(c.view.id)}" aria-label="${esc(cell.code)}">${c.label ? `<span class="band">${cls === 'pres' ? '✓ ' : ''}${esc(c.label)}</span>` : ''}</button>`;
+  }
+  return h + '</div>';
+}
+
+function sheetPos(code) {
+  return `<div class="grab"></div><p class="sh-t">${t(S.lirFile.pos, { code: esc(code) })}</p><p class="sh-s">${S.lirFile.posText}</p>
+    <label class="lbl">${S.lirFile.uldNum}<input id="unum" autocomplete="off" autocapitalize="characters" maxlength="12"></label>
+    <div class="stack"><button class="btn primary" data-act="posLink" data-code="${esc(code)}">${S.lirFile.link}</button><button class="btn ghost" data-act="closeSheet">${S.btn.close}</button></div>`;
+}
+
+function sheetLirNew() {
+  const r = ui.lirNew;
+  if (!r) return '';
+  const h = r.header;
+  const s0 = st();
+  const day = h.date != null ? h.date : new Date(new Date().setHours(0, 0, 0, 0)).getTime();
+  const exist = h.number ? Object.values(s0.flights).find((x) => x.number === h.number && x.date === day) : null;
+  const info = [h.reg, h.route, h.std ? 'STD ' + h.std : '', h.edno != null ? t(S.lir.edno, { n: h.edno }) : '', fmtD(day)].filter(Boolean).join(' · ');
+  let b;
+  if (exist && exist.lir && exist.lir.edno === h.edno) b = `<div class="card muted">${S.err.SAME_EDITION}</div>`;
+  else if (exist) b = `<div class="card">${t(S.lirFile.exists, { old: exist.lir ? exist.lir.edno : '?', n: h.edno })}</div><button class="btn primary" data-act="lirCreate">${t(S.lirFile.update, { n: h.edno })}</button>`;
+  else b = `<label class="lbl">${S.lirFile.number}<input id="lnum" autocomplete="off" autocapitalize="characters" maxlength="8" value="${esc(h.number)}"></label>
+    <label class="lbl">${S.lirFile.stand}<input id="lstand" autocomplete="off" autocapitalize="characters" maxlength="6"></label>
+    <p class="sh-s" style="margin:6px 2px">${S.lirFile.layout}: <b>${esc((S.layout.titles[r.layout.key]) || r.layout.title)}</b></p>
+    <button class="btn primary" data-act="lirCreate">${S.lirFile.create}</button>`;
+  return `<div class="grab"></div><p class="sh-t">${S.lirFile.title}</p><p class="sh-s">${esc(info)}</p><div class="stack">${b}<button class="btn ghost" data-act="closeSheet">${S.btn.close}</button></div>`;
+}
+
+async function onLirFile(file) {
+  toast(S.lirFile.reading, false);
+  try {
+    ui.lirNew = await readLirPdf(file, KNOWN_LAYOUTS);
+    $('toast').style.display = 'none';
+    openSheet({ t: 'lirNew' });
+  } catch (e) {
+    toast(S.err[e && e.message] || S.err.generic, false, true);
+  }
+}
+
 function viewLir(f) {
   if (!f.lir) return `<div class="card muted">${S.lir.noLir}</div>`;
   const c = Q.counts(st(), f.id);
   const layout = f.lir.layout;
   const title = (layout.key && S.layout.titles[layout.key]) || layout.title;
-  const v = Q.lirSheetView(st(), f.id);
+  const pageMode = !!f.lir.page;
+  const url = pageMode ? ensurePage(f) : null;
+  if (pageMode && url === 'loading') return `<div class="card muted">${S.lirFile.loading}</div>`;
+  if (pageMode && url === 'missing') return `<div class="card muted">${S.lirFile.missing}</div><button class="btn primary mt" data-act="pickFile">${S.flights.openFile}</button><input type="file" id="lirfile" accept="application/pdf,.pdf" hidden>`;
+  const v = pageMode ? null : Q.lirSheetView(st(), f.id);
   let h = `<div class="lirtop"><span class="chip c-dolly">${t(S.lir.summary, { a: c.onDolly, b: c.presented, c: c.noDolly })}</span><span class="chip c-none">${t(S.lir.edno, { n: f.lir.edno })}</span></div>`;
   h += `<div class="sheetouter"><div class="lirtools" role="toolbar" aria-label="${S.lir.sheetLabel}">
     <button class="btn sm" data-act="rotate" aria-label="${S.lir.rotate}">⟳<span>${S.lir.rotate}</span></button>
     <button class="btn sm" data-act="zoomOut" aria-label="${S.lir.zoomOut}">−</button>
     <button class="btn sm" data-act="zoomIn" aria-label="${S.lir.zoomIn}">+</button>
     <button class="btn sm" data-act="fit" aria-label="${S.lir.fit}">⤢<span>${S.lir.fit}</span></button>
-  </div><div class="sheetwrap" id="sw"><div class="sheetbox" id="sb">${sheetHtml(v)}</div></div></div>`;
-  h += `<p class="legend lirleg"><b>${esc(title)}.</b> ${S.lir.legend}</p>`;
+  </div><div class="sheetwrap" id="sw"><div class="sheetbox" id="sb">${pageMode ? pageSheetHtml(f, url) : sheetHtml(v)}</div></div></div>`;
+  h += `<p class="legend lirleg">${pageMode ? S.lirFile.legend : `<b>${esc(title)}.</b> ${S.lir.legend}`}</p>`;
   return h;
 }
 
@@ -334,7 +409,7 @@ function unitCellHtml(u) {
     body = `<span class="cl">${esc(u.label)}</span><span class="cu">${S.dollies.detached}</span>`;
   } else if (uld) {
     cls = 'occ';
-    body = `<span class="cl">${esc(u.label)}</span><span class="cu">${esc(shortUld(uld.number))}</span><span class="cs">→ ${esc(uld.positionCode)}</span>`;
+    body = `<span class="cl">${esc(u.label)}</span><span class="cu">${esc(shortUld(uld.number || uld.positionCode))}</span><span class="cs">→ ${esc(uld.positionCode)}</span>`;
   } else if (u.lastUldId) {
     cls = 'gone';
     body = `<span class="cl">${esc(u.label)}</span><span class="cu">${esc(shortUld(uldNo(u.lastUldId)))}</span><span class="cs">${S.dollies.given}</span>`;
@@ -431,7 +506,7 @@ function sheetUld(id) {
   if (!v) return '';
   const idx = v.status === ULD_STATUS.PRESENTED || v.status === ULD_STATUS.LOADED_CONFIRMED ? 2 : v.status === ULD_STATUS.ON_DOLLY ? 1 : 0;
   const names = [S.uld.stepDollyless, S.uld.stepOnDolly, S.uld.stepPresented];
-  let h = `<div class="grab"></div><p class="sh-t">${esc(v.number)}</p><p class="sh-s">${t(S.uld.positionLine, { pos: `<b>${esc(v.positionCode)}</b>`, weight: v.weight })} ${statusChip(v.status)}</p>`;
+  let h = `<div class="grab"></div><p class="sh-t">${esc(v.number || t(S.lirFile.pos, { code: v.positionCode }))}</p><p class="sh-s">${t(v.weight == null ? S.uld.positionOnly : S.uld.positionLine, { pos: `<b>${esc(v.positionCode)}</b>`, weight: v.weight })} ${statusChip(v.status)}</p>`;
   h += `<div class="steps">${names.map((n, i) => `<div class="${i <= idx ? 'on' : ''}${i === idx ? ' cur' : ''}">${n}</div>`).join('')}</div>`;
   let b = '';
   if (v.status === ULD_STATUS.ON_DOLLY) {
@@ -604,6 +679,8 @@ function renderSheet() {
     case 'endAsk': h = sheetEndAsk(); break;
     case 'time': h = sheetTime(sh); break;
     case 'menu': h = sheetMenu(); break;
+    case 'pos': h = sheetPos(sh.code); break;
+    case 'lirNew': h = sheetLirNew(); break;
     default: h = '';
   }
   el.innerHTML = `<div class="panel">${h}</div>`;
@@ -637,7 +714,7 @@ function toast(msg, withUndo, bad) {
 /* ---------- render ---------- */
 function render() {
   const f = curFlight();
-  $('hdr').innerHTML = `<div class="fl"><div class="t1">${f ? esc(f.number) + ' · ' + esc(f.stand) : S.appName}</div><div class="t2"><span class="demo">${S.demo}</span>${f ? `<span>${esc(f.aircraftType)}</span><span>${S.flightStatus[f.status]}</span>` : ''}</div></div><button class="menubtn" data-act="menu" aria-label="${S.btn.menu}">⋮</button>`;
+  $('hdr').innerHTML = `<div class="fl"><div class="t1">${f ? esc(f.number) + (f.stand ? ' · ' + esc(f.stand) : '') : S.appName}</div><div class="t2">${!f || (f.lir && f.lir.demo) || !f.lir ? `<span class="demo">${S.demo}</span>` : ''}${f ? `<span>${esc(f.aircraftType)}</span><span>${S.flightStatus[f.status]}</span>` : ''}</div></div><button class="menubtn" data-act="menu" aria-label="${S.btn.menu}">⋮</button>`;
   $('nav').innerHTML = TAB_ORDER.map((k) => `<button class="${ui.tab === k ? 'on' : ''}" data-act="tab" data-tab="${k}">${ic(k)}${S.tabs[k]}</button>`).join('');
   const m = $('main');
   const keep = m.scrollTop;
@@ -679,6 +756,35 @@ const A = {
   openFlight(d) { ui.flightId = d.id; ui.tab = 'lir'; ui.q = ''; savePrefs(); $('main').scrollTop = 0; render(); },
   goDollies() { ui.tab = 'dollies'; savePrefs(); render(); },
   menu() { openSheet({ t: 'menu' }); },
+  pickFile() { const i = $('lirfile'); if (i) i.click(); },
+  pos(d) { openSheet({ t: 'pos', code: d.code }); },
+  posLink(d) {
+    const f = curFlight();
+    const r = store.run(C.registerUld, { flightId: f.id, code: d.code, number: $('unum') ? $('unum').value : '' });
+    if (!r.ok) { toast((r.error && S.err[r.error.code]) || S.err.generic, false, true); return; }
+    openSheet({ t: 'pickDolly', id: r.events[0].payload.uldId });
+    render();
+  },
+  async lirCreate() {
+    const r0 = ui.lirNew;
+    if (!r0) return;
+    const h = r0.header;
+    const day = h.date != null ? h.date : new Date(new Date().setHours(0, 0, 0, 0)).getTime();
+    const num = $('lnum') ? $('lnum').value : h.number;
+    const stand = $('lstand') ? $('lstand').value.trim().toUpperCase() : '';
+    const r = store.run(C.importLirPage, { number: num, date: day, aircraftType: r0.layout.title, stand, edno: h.edno, reg: h.reg, route: h.route, std: h.std, layout: r0.layout });
+    if (!r.ok) { toast((r.error && S.err[r.error.code]) || S.err.generic, false, true); return; }
+    const flightId = r.events[0].payload.flightId;
+    const revised = r.events[0].eventType === T.LIR_REVISED;
+    const where = await putFile(flightId, r0.blob);
+    if (ui.pageUrls[flightId] && ui.pageUrls[flightId].startsWith('blob:')) URL.revokeObjectURL(ui.pageUrls[flightId]);
+    delete ui.pageUrls[flightId];
+    ui.flightId = flightId; ui.tab = 'lir'; ui.lirNew = null; savePrefs();
+    closeSheet();
+    toast(revised ? t(S.lirFile.revised, { n: h.edno }) : t(S.lirFile.saved, { number: curFlight().number }), false);
+    if (where === 'memory') setTimeout(() => toast(S.sheet.storageMem, false, true), 2500);
+    render();
+  },
   rotate() { ui.rot = effRot() === 90 ? 0 : 90; ui.zoom = 1; render(); },
   zoomIn() { setZoom(ui.zoom * 1.4); },
   zoomOut() { setZoom(ui.zoom / 1.4); },
@@ -756,7 +862,8 @@ const baseConfirm = A.confirmYes;
 A.confirmYes = function () {
   if (ui.pending && ui.pending.custom === 'reset') {
     closeSheet();
-    store.reset().then(() => {
+    Promise.all([store.reset(), clearFiles()]).then(() => {
+      ui.pageUrls = {};
       seedDemo(store);
       ui.flightId = null; ui.tab = 'flights'; ui.q = '';
       toast(S.toast.reset, false);
@@ -774,6 +881,15 @@ document.addEventListener('click', (e) => {
   if (fn) fn(el.dataset, el, e);
 });
 $('scrim').addEventListener('click', closeSheet);
+
+document.addEventListener('change', (e) => {
+  const el = e.target;
+  if (el && el.id === 'lirfile' && el.files && el.files[0]) {
+    const file = el.files[0];
+    el.value = '';
+    onLirFile(file);
+  }
+});
 
 document.addEventListener('input', (e) => {
   const el = e.target;

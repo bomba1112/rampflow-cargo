@@ -14,6 +14,8 @@ export const SCHEMA_VERSION = 1;
 export const T = Object.freeze({
   FLIGHT_CREATED: 'FLIGHT_CREATED',
   LIR_LOADED: 'LIR_LOADED',
+  LIR_REVISED: 'LIR_REVISED',
+  ULD_REGISTERED: 'ULD_REGISTERED',
   DOLLY_GROUP_CREATED: 'DOLLY_GROUP_CREATED',
   SINGLE_DOLLY_CREATED: 'SINGLE_DOLLY_CREATED',
   ULD_LINKED: 'ULD_LINKED',
@@ -80,7 +82,10 @@ const H = {
       number: p.number,
       date: p.date,
       aircraftType: p.aircraftType,
-      stand: p.stand,
+      stand: p.stand || '',
+      reg: p.reg || '',
+      route: p.route || '',
+      std: p.std || '',
       status: FLIGHT_STATUS.PLANNED,
       lir: null,
       seq: ++s.seq,
@@ -90,7 +95,7 @@ const H = {
   [T.LIR_LOADED](s, p, e) {
     const f = s.flights[p.flightId];
     if (!f) return;
-    f.lir = { edno: p.edno, layout: p.layout, loadedAt: e.occurredAt, demo: !!p.demo };
+    f.lir = { edno: p.edno, layout: p.layout, loadedAt: e.occurredAt, demo: !!p.demo, page: !!p.page };
     for (const pos of p.positions) {
       const id = posId(p.flightId, pos.code);
       // box = where the ULD is drawn when it is not exactly inside its cell (a double-width unit, or one standing across the centre line).
@@ -122,6 +127,40 @@ const H = {
         };
       }
     }
+  },
+
+  // A newer edition of the same LIR arrived (Edno 3 -> 4). Marks already made stay where they are.
+  [T.LIR_REVISED](s, p, e) {
+    const f = s.flights[p.flightId];
+    if (f && f.lir) {
+      f.lir.edno = p.edno;
+      f.lir.loadedAt = e.occurredAt;
+    }
+  },
+
+  // The user marked a position on the original LIR page: from now on there is a ULD there (number optional, the page shows it).
+  [T.ULD_REGISTERED](s, p) {
+    const f = s.flights[p.flightId];
+    if (!f) return;
+    const id = posId(p.flightId, p.code);
+    if (s.positions[id] && s.positions[id].uldId) return;
+    s.positions[id] = { id, flightId: p.flightId, code: p.code, uldId: p.uldId, covers: [], box: null, showLabel: false };
+    s.ulds[p.uldId] = {
+      id: p.uldId,
+      flightId: p.flightId,
+      number: p.number || '',
+      type: '',
+      weight: null,
+      dest: '',
+      cat: '',
+      via: '',
+      positionCode: p.code,
+      status: ULD_STATUS.UNKNOWN,
+      linked: null,
+      lastDolly: null,
+      presentedAt: null,
+      everLinked: false,
+    };
   },
 
   [T.DOLLY_GROUP_CREATED](s, p, e) {
