@@ -1,11 +1,14 @@
 // All user-facing text lives here, so az / en can be added later as strings.az.js / strings.en.js.
 // LIR, ULD, PMC, high loader, Stand stay as the crew uses them.
 
-export function t(template, vars = {}) {
-  return String(template).replace(/\{(\w+)\}/g, (_, k) => (vars[k] == null ? '' : vars[k]));
-}
-
-export const S = {
+export const RU = {
+  locale: 'ru-RU',
+  units: { kg: 'кг', h: 'ч', min: 'мин' },
+  kind: { group: 'Сцепка', single: '20 ft' },
+  layout: {
+    titles: { DEMO_A: 'Демо-схема A (не официальная)', DEMO_B: 'Демо-схема B (не официальная)' },
+    rows: { MAIN_R: 'Главная палуба · правая сторона', MAIN_L: 'Главная палуба · левая сторона', MAIN: 'Главная палуба', LOWER: 'Нижняя палуба' },
+  },
   appName: 'RampFlow Cargo',
   demo: 'Демо · вымышленные данные',
   tabs: { flights: 'Рейсы', lir: 'LIR', dollies: 'Тележки', search: 'Поиск', load: 'Загрузка' },
@@ -148,6 +151,7 @@ export const S = {
     start: 'начало',
     end: 'конец',
     menuTitle: 'Меню',
+    lang: 'Язык / Dil',
     open: 'Открытые вопросы',
     openText:
       'Постоянная маркировка тележек не подтверждена: приложение не считает «136-2» постоянным именем конкретной тележки. Оставлено открытым до проверки с Ground Supervisor.',
@@ -159,8 +163,10 @@ export const S = {
     REVERT_PRESENTED: 'ULD отмечена как переданная на high loader. Вернуть её на тележку {to}?',
     UNLINK_ULD: 'Снять ULD с тележки {from}? Привязка останется в истории.',
     DUPLICATE_NUMBER: '{kind} {number} уже есть на этом рейсе. Создать ещё одну?',
+    RESET: 'Все данные на этом устройстве будут удалены и заменены демо-данными.',
   },
   err: {
+    generic: 'Ошибка',
     NO_FLIGHT: 'Рейс не найден.',
     INVALID_NUMBER: 'Номер: от 1 до 8 символов, цифры или латинские буквы.',
     NOT_FOUND: 'Не найдено.',

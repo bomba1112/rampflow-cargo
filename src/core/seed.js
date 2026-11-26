@@ -6,23 +6,26 @@ const MIN = 60000;
 const slot = (groupId, n) => ({ kind: 'slot', id: `${groupId}:${n}` });
 
 const LAYOUT_A = {
+  key: 'DEMO_A',
   title: 'Демо-схема A (не официальная)',
   rows: [
-    { name: 'Главная палуба · правая сторона', codes: ['AR', 'BR', 'CR', 'DR'] },
-    { name: 'Главная палуба · левая сторона', codes: ['AL', 'BL', 'CL', 'DL'] },
-    { name: 'Нижняя палуба', codes: ['11P', '12P', '21P', '22P'] },
+    { key: 'MAIN_R', name: 'Главная палуба · правая сторона', codes: ['AR', 'BR', 'CR', 'DR'] },
+    { key: 'MAIN_L', name: 'Главная палуба · левая сторона', codes: ['AL', 'BL', 'CL', 'DL'] },
+    { key: 'LOWER', name: 'Нижняя палуба', codes: ['11P', '12P', '21P', '22P'] },
   ],
 };
 const LAYOUT_B = {
+  key: 'DEMO_B',
   title: 'Демо-схема B (не официальная)',
   rows: [
-    { name: 'Главная палуба', codes: ['AL', 'AR', 'BL', 'BR'] },
-    { name: 'Нижняя палуба', codes: ['11P', '12P'] },
+    { key: 'MAIN', name: 'Главная палуба', codes: ['AL', 'AR', 'BL', 'BR'] },
+    { key: 'LOWER', name: 'Нижняя палуба', codes: ['11P', '12P'] },
   ],
 };
 const LAYOUT_C = {
+  key: 'DEMO_B',
   title: 'Демо-схема B (не официальная)',
-  rows: [{ name: 'Главная палуба', codes: ['AL', 'AR', 'BL', 'BR'] }],
+  rows: [{ key: 'MAIN', name: 'Главная палуба', codes: ['AL', 'AR', 'BL', 'BR'] }],
 };
 
 function uldList(flightId, numbers, layout, skip = []) {

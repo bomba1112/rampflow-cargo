@@ -7,7 +7,7 @@ import { T, ULD_STATUS, LOCATION, undoneIds } from '../core/model.js';
 import * as C from '../core/commands.js';
 import * as Q from '../core/selectors.js';
 import { pickStorage } from '../web/storage.js';
-import { S, t } from './strings.ru.js';
+import { S, t, setLang, getLang } from './strings.js';
 
 const TZ = 'Asia/Baku';
 const PREF_KEY = 'rampflow.ui.v1';
@@ -15,7 +15,7 @@ const PREF_KEY = 'rampflow.ui.v1';
 /* ---------- helpers ---------- */
 function fmtT(ms) {
   try {
-    return new Intl.DateTimeFormat('ru-RU', { timeZone: TZ, hour: '2-digit', minute: '2-digit', hour12: false }).format(ms);
+    return new Intl.DateTimeFormat(S.locale, { timeZone: TZ, hour: '2-digit', minute: '2-digit', hour12: false }).format(ms);
   } catch (e) {
     const d = new Date(ms);
     return ('0' + d.getHours()).slice(-2) + ':' + ('0' + d.getMinutes()).slice(-2);
@@ -23,7 +23,7 @@ function fmtT(ms) {
 }
 function fmtD(ms) {
   try {
-    return new Intl.DateTimeFormat('ru-RU', { timeZone: TZ, day: '2-digit', month: '2-digit', year: 'numeric' }).format(ms);
+    return new Intl.DateTimeFormat(S.locale, { timeZone: TZ, day: '2-digit', month: '2-digit', year: 'numeric' }).format(ms);
   } catch (e) {
     return new Date(ms).toLocaleDateString();
   }
@@ -31,7 +31,7 @@ function fmtD(ms) {
 function fmtDur(ms) {
   const m = Math.round(ms / 60000);
   const h = Math.floor(m / 60);
-  return h ? h + ' ч ' + ('0' + (m % 60)).slice(-2) + ' мин' : m + ' мин';
+  return h ? h + ' ' + S.units.h + ' ' + ('0' + (m % 60)).slice(-2) + ' ' + S.units.min : m + ' ' + S.units.min;
 }
 function fmtClock(ms) {
   const s = Math.max(0, Math.floor(ms / 1000));
@@ -123,7 +123,7 @@ function describe(ev) {
     case T.LOADING_STARTED: return S.log.LOADING_STARTED;
     case T.LOADING_ENDED: return S.log.LOADING_ENDED;
     case T.LOADING_TIME_CORRECTED:
-      return t(S.log.LOADING_TIME_CORRECTED, { what: p.field === 'START' ? 'Начало' : 'Конец', old: fmtT(p.oldValue), new: fmtT(p.newValue), reason: p.reason });
+      return t(S.log.LOADING_TIME_CORRECTED, { what: p.field === 'START' ? S.load.start : S.load.end, old: fmtT(p.oldValue), new: fmtT(p.newValue), reason: p.reason });
     case T.ACTION_UNDONE: return S.log.ACTION_UNDONE;
     default: return ev.eventType;
   }
@@ -231,10 +231,10 @@ function lirCellHtml(flightId, code) {
 function viewLir(f) {
   if (!f.lir) return `<div class="card muted">${S.lir.noLir}</div>`;
   const c = Q.counts(st(), f.id);
-  let h = `<div class="sumline"><span class="chip c-dolly">${t(S.lir.summary, { a: c.onDolly, b: c.presented, c: c.noDolly })}</span><span class="chip c-none">${t(S.lir.edno, { n: f.lir.edno })} · ${esc(f.lir.layout.title)}</span></div>`;
+  let h = `<div class="sumline"><span class="chip c-dolly">${t(S.lir.summary, { a: c.onDolly, b: c.presented, c: c.noDolly })}</span><span class="chip c-none">${t(S.lir.edno, { n: f.lir.edno })} · ${esc((f.lir.layout.key && S.layout.titles[f.lir.layout.key]) || f.lir.layout.title)}</span></div>`;
   h += `<p class="legend">${S.lir.legend}</p>`;
   for (const row of f.lir.layout.rows) {
-    h += `<div class="lr"><h3>${esc(row.name)}</h3><div class="lrow">${row.codes.map((code) => lirCellHtml(f.id, code)).join('')}</div></div>`;
+    h += `<div class="lr"><h3>${esc((row.key && S.layout.rows[row.key]) || row.name)}</h3><div class="lrow">${row.codes.map((code) => lirCellHtml(f.id, code)).join('')}</div></div>`;
   }
   return h;
 }
@@ -393,7 +393,7 @@ function pickUldListHtml(ref, q) {
   if (qq) list = list.filter((v) => v.number.toUpperCase().includes(qq) || v.positionCode.toUpperCase() === qq);
   const free = list.filter((v) => v.status !== ULD_STATUS.ON_DOLLY);
   const busy = list.filter((v) => v.status === ULD_STATUS.ON_DOLLY);
-  const row = (v, act) => `<button class="row" data-act="${act}" data-id="${esc(v.id)}" data-rk="${ref.kind}" data-ri="${esc(ref.id)}"><span class="code">${esc(v.positionCode)}</span><span class="rmain"><b>${esc(v.number)}</b><small>${v.weight} кг</small></span><span class="rst">${statusChip(v.status)}</span></button>`;
+  const row = (v, act) => `<button class="row" data-act="${act}" data-id="${esc(v.id)}" data-rk="${ref.kind}" data-ri="${esc(ref.id)}"><span class="code">${esc(v.positionCode)}</span><span class="rmain"><b>${esc(v.number)}</b><small>${v.weight} ${S.units.kg}</small></span><span class="rst">${statusChip(v.status)}</span></button>`;
   let h = free.map((v) => row(v, 'doLink')).join('');
   if (busy.length) h += `<p class="hint">${S.sheet.alreadyOn}</p>` + busy.map((v) => row(v, 'doLink')).join('');
   return h || `<div class="card muted">${S.sheet.pickUldNone}</div>`;
@@ -439,7 +439,7 @@ function newDollyPreview(kind, val) {
     kind === 'STANDARD_4'
       ? `<div class="prev">${[1, 2, 3, 4].map((i) => `<span>${esc(n)}-${i}</span>`).join('')}</div><p class="hint">${S.sheet.previewHintGroup}</p>`
       : `<div class="prev one"><span>${esc(n)}</span></div><p class="hint">${S.sheet.previewHintSingle}</p>`;
-  if (dupExists(kind, n)) h += `<div class="warn">${t(S.sheet.dupWarn, { kind: kind === 'STANDARD_4' ? 'Сцепка' : '20 ft', number: esc(n) })}</div>`;
+  if (dupExists(kind, n)) h += `<div class="warn">${t(S.sheet.dupWarn, { kind: kind === 'STANDARD_4' ? S.kind.group : S.kind.single, number: esc(n) })}</div>`;
   return h;
 }
 function sheetNewDolly(sh) {
@@ -466,8 +466,8 @@ function confirmText(code, data) {
     case 'MOVE_ULD': return t(S.confirm.MOVE_ULD, { from: dollyText(data.from), to: dollyText(data.to) });
     case 'REVERT_PRESENTED': return t(S.confirm.REVERT_PRESENTED, { to: dollyText(data.to) });
     case 'UNLINK_ULD': return t(S.confirm.UNLINK_ULD, { from: dollyText(data.dolly) });
-    case 'DUPLICATE_NUMBER': return t(S.confirm.DUPLICATE_NUMBER, { kind: data.kind === 'STANDARD_4' ? 'Сцепка' : '20 ft', number: data.number });
-    case 'RESET': return 'Все данные на этом устройстве будут удалены и заменены демо-данными.';
+    case 'DUPLICATE_NUMBER': return t(S.confirm.DUPLICATE_NUMBER, { kind: data.kind === 'STANDARD_4' ? S.kind.group : S.kind.single, number: data.number });
+    case 'RESET': return S.confirm.RESET;
     default: return code;
   }
 }
@@ -494,6 +494,7 @@ function sheetTime(sh) {
 
 function sheetMenu() {
   return `<div class="grab"></div><p class="sh-t">${S.sheet.menuTitle}</p><p class="sh-s">${S.sheet.about}</p><div class="stack">
+    <div class="card" style="margin:0"><b>${S.sheet.lang}</b><div class="chips mt"><button class="fchip ${getLang() === 'az' ? 'on' : ''}" data-act="lang" data-lang="az">Azərbaycanca</button><button class="fchip ${getLang() === 'ru' ? 'on' : ''}" data-act="lang" data-lang="ru">Русский</button></div></div>
     <div class="card muted" style="font-size:14px;margin:0"><b style="color:var(--ink)">${S.sheet.open}</b><br>${S.sheet.openText}</div>
     <button class="btn sm ghost" data-act="resetAsk">${S.btn.reset}</button><button class="btn ghost" data-act="closeSheet">${S.btn.close}</button></div>`;
 }
@@ -590,6 +591,7 @@ const A = {
   openFlight(d) { ui.flightId = d.id; ui.tab = 'lir'; ui.q = ''; savePrefs(); $('main').scrollTop = 0; render(); },
   goDollies() { ui.tab = 'dollies'; savePrefs(); render(); },
   menu() { openSheet({ t: 'menu' }); },
+  lang(d) { setLang(d.lang); render(); },
   closeSheet,
   uld(d) { openSheet({ t: 'uld', id: d.id }); },
   dslot(d) { openSheet({ t: 'dolly', ref: refOf(d) }); },
@@ -619,7 +621,7 @@ const A = {
     const confirmed = dupExists(sh.kind, n); // the sheet already warned about the repeat
     const then = sh.then;
     const r = store.run(four ? C.createDollyGroup : C.createSingleDolly, { flightId: f.id, number: n, confirmed });
-    if (!r.ok) { toast((r.error && S.err[r.error.code]) || 'Ошибка', false, true); return; }
+    if (!r.ok) { toast((r.error && S.err[r.error.code]) || S.err.generic, false, true); return; }
     const msg = four ? t(S.toast.group, { n }) : t(S.toast.single, { n });
     if (then) { openSheet({ t: 'pickDolly', id: then }); toast(msg, true); render(); return; }
     ui.tab = 'dollies'; savePrefs(); closeSheet(); toast(msg, true); render();

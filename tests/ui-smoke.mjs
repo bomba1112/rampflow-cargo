@@ -6,7 +6,7 @@ import assert from 'node:assert/strict';
 const html = readFileSync(new URL('../dist-single/index.html', import.meta.url), 'utf8');
 const errors = [];
 const dom = new JSDOM(html, { runScripts: 'dangerously', url: 'http://localhost/', pretendToBeVisual: true,
-  beforeParse(w) { w.addEventListener('error', (e) => errors.push(e.message)); w.console.error = (...a) => errors.push(a.join(' ')); } });
+  beforeParse(w) { w.localStorage.setItem('rampflow.lang', 'ru'); w.addEventListener('error', (e) => errors.push(e.message)); w.console.error = (...a) => errors.push(a.join(' ')); } });
 const { document: d, window: w } = dom.window;
 const wait = (ms = 30) => new Promise((r) => setTimeout(r, ms));
 const click = (el) => { assert.ok(el, 'element exists'); el.dispatchEvent(new w.MouseEvent('click', { bubbles: true })); };
@@ -118,6 +118,23 @@ await step('loading: end ask shows remaining count, then correction needs reason
 await step('data survives reload (localStorage/IDB fallback keeps events)', async () => {
   const n = JSON.parse(w.localStorage.getItem('rampflow.events.v1') || '[]').length;
   assert.ok(n > 20, 'events stored: ' + n);
+});
+await step('language switch to Azerbaijani changes UI and keeps data', async () => {
+  click(q('[data-act="menu"]')); await wait();
+  click(q('#sheet [data-lang="az"]')); await wait();
+  click(q('#sheet [data-act="closeSheet"]')); await wait();
+  assert.match(q('nav').textContent, /Uçuşlar/);
+  tab('dollies'); await wait();
+  assert.match(q('main').textContent, /Qatar 136/);
+  assert.match(q('main').textContent, /ÇƏKİCİ/);
+  assert.equal(d.documentElement.lang, 'az');
+  assert.equal(w.localStorage.getItem('rampflow.lang'), 'az');
+});
+await step('Azerbaijani LIR rows are translated, no Cyrillic left in UI chrome', async () => {
+  tab('lir'); await wait();
+  assert.match(q('main').textContent, /Əsas göyərtə/);
+  const chrome = q('nav').textContent + q('#hdr').textContent + q('main').textContent;
+  assert.doesNotMatch(chrome, /[А-Яа-яЁё]/);
 });
 await step('no runtime errors', () => assert.deepEqual(errors, []));
 
