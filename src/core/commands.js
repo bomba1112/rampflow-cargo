@@ -17,20 +17,20 @@ const ev = (eventType, aggregateId, payload) => ({ eventType, aggregateId, paylo
  * A LIR file was opened. New flight (number + date) -> flight with an empty LIR page. The same flight again
  * (a newer edition) -> only the edition changes, nothing already marked is lost.
  */
-export function importLirPage(state, { number, date, aircraftType, stand, edno, reg, route, std, layout }, ctx) {
+export function importLirPage(state, { number, date, aircraftType, stand, edno, reg, route, std, zones, pageSize }, ctx) {
   const n = normalizeNumber(number);
   if (!n) return fail('INVALID_NUMBER');
-  if (!layout) return fail('NO_LAYOUT');
+  if (!Array.isArray(zones) || zones.length < 5) return fail('PAGE_LAYOUT');
   const day = typeof date === 'number' && Number.isFinite(date) ? date : ctx.now();
   const same = Object.values(state.flights).find((f) => f.number === n && f.date === day);
   if (same) {
     if (same.lir && same.lir.edno === edno) return fail('SAME_EDITION', { flightId: same.id });
-    return ok([ev(T.LIR_REVISED, same.id, { flightId: same.id, edno })]);
+    return ok([ev(T.LIR_REVISED, same.id, { flightId: same.id, edno, zones })]);
   }
   const flightId = ctx.newId();
   return ok([
-    ev(T.FLIGHT_CREATED, flightId, { flightId, number: n, date: day, aircraftType: aircraftType || layout.title || '', stand: stand || '', reg: reg || '', route: route || '', std: std || '' }),
-    ev(T.LIR_LOADED, flightId, { flightId, edno: edno || 1, layout, demo: false, page: true, positions: [] }),
+    ev(T.FLIGHT_CREATED, flightId, { flightId, number: n, date: day, aircraftType: aircraftType || '', stand: stand || '', reg: reg || '', route: route || '', std: std || '' }),
+    ev(T.LIR_LOADED, flightId, { flightId, edno: edno || 1, zones, pageSize: pageSize || null, demo: false, page: true, positions: [] }),
   ]);
 }
 
@@ -39,7 +39,8 @@ export function registerUld(state, { flightId, code, number }, ctx) {
   const f = state.flights[flightId];
   if (!f || !f.lir) return fail('NO_FLIGHT');
   if (typeof code !== 'string' || !code) return fail('NOT_FOUND');
-  if (f.lir.layout && !codesOf(f.lir.layout).includes(code)) return fail('NOT_FOUND');
+  if (f.lir.zones) { if (!f.lir.zones.some((z) => z.code === code)) return fail('NOT_FOUND'); }
+  else if (f.lir.layout && !codesOf(f.lir.layout).includes(code)) return fail('NOT_FOUND');
   const pos = state.positions[`${flightId}:${code}`];
   if (pos && pos.uldId) return fail('ALREADY_REGISTERED', { uldId: pos.uldId });
   const num = String(number == null ? '' : number).trim().toUpperCase().replace(/\s+/g, '');

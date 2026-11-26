@@ -95,7 +95,7 @@ const H = {
   [T.LIR_LOADED](s, p, e) {
     const f = s.flights[p.flightId];
     if (!f) return;
-    f.lir = { edno: p.edno, layout: p.layout, loadedAt: e.occurredAt, demo: !!p.demo, page: !!p.page };
+    f.lir = { edno: p.edno, layout: p.layout || null, zones: p.zones || null, pageSize: p.pageSize || null, loadedAt: e.occurredAt, demo: !!p.demo, page: !!p.page };
     for (const pos of p.positions) {
       const id = posId(p.flightId, pos.code);
       // box = where the ULD is drawn when it is not exactly inside its cell (a double-width unit, or one standing across the centre line).
@@ -134,6 +134,7 @@ const H = {
     const f = s.flights[p.flightId];
     if (f && f.lir) {
       f.lir.edno = p.edno;
+      if (p.zones) f.lir.zones = p.zones;
       f.lir.loadedAt = e.occurredAt;
     }
   },

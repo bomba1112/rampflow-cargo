@@ -1,3 +1,6 @@
+import { detectZones } from './zones.js';
+import { nameZones, PAGE } from '../core/layouts.js';
+
 // Reads a LIR PDF on this phone: the header fields (flight, date, edition) and the picture of the loading sheet.
 // Everything happens in the browser. The file is never uploaded.
 
@@ -46,46 +49,11 @@ async function pdfjs() {
 }
 
 /**
- * Does the picture show THIS layout? Samples the cell borders where the layout expects them and counts dark pixels.
- * A different aircraft layout puts its borders elsewhere, so the ratio drops. Returns 0..1.
+ * file: a LIR PDF. Returns { header, blob, zones, title, page }.
+ * blob = JPEG of the loading diagram at 2x (page.w x page.cropH points). zones = the boxes found on THIS picture, named
+ * where the airframe grid is known. Errors (Error.message): NOT_PDF, PAGE_SIZE (not the page of this report), PAGE_LAYOUT (no boxes found).
  */
-export function gridMatch(ctx, layout, scale) {
-  const { page, sheet } = layout;
-  const cells = sheet.cells.filter((c) => !c.bulk);
-  const W = ctx.canvas.width;
-  const H = ctx.canvas.height;
-  const img = ctx.getImageData(0, 0, W, H).data;
-  const dark = (x, y) => {
-    for (let dy = -3; dy <= 3; dy++) for (let dx = -3; dx <= 3; dx++) {
-      const px = Math.round(x) + dx;
-      const py = Math.round(y) + dy;
-      if (px < 0 || py < 0 || px >= W || py >= H) continue;
-      const i = (py * W + px) * 4;
-      if (img[i] + img[i + 1] + img[i + 2] < 390) return true;
-    }
-    return false;
-  };
-  const toX = (u) => (page.ox + u * page.sx) * scale;
-  const toY = (v) => (page.oy + v * page.sy - page.cropTop) * scale;
-  let hit = 0;
-  let all = 0;
-  for (const c of cells) {
-    for (let k = 1; k <= 8; k++) {
-      const f = k / 9;
-      all += 2;
-      if (dark(toX(c.x), toY(c.y + c.h * f))) hit++; // left border
-      if (dark(toX(c.x + c.w * f), toY(c.y))) hit++; // top border
-    }
-  }
-  return all ? hit / all : 0;
-}
-
-/**
- * file: a LIR PDF. layouts: the layouts we know. Returns { header, blob, layout }.
- * blob = JPEG of the sheet area at 2x, in page points: width page.w, height page.cropH.
- * Errors (Error.message): NOT_PDF, PAGE_SIZE (not the page of this report), PAGE_LAYOUT (no known layout fits the picture).
- */
-export async function readLirPdf(file, layouts) {
+export async function readLirPdf(file) {
   const lb = await pdfjs();
   const data = new Uint8Array(await file.arrayBuffer());
   let doc;
@@ -97,26 +65,24 @@ export async function readLirPdf(file, layouts) {
   try {
     const pg = await doc.getPage(1);
     const [x0, y0, x1, y1] = pg.view;
-    const first = layouts[0].page;
-    if (Math.abs(x1 - x0 - first.w) > 4 || Math.abs(y1 - y0 - first.h) > 4) throw new Error('PAGE_SIZE');
+    if (Math.abs(x1 - x0 - PAGE.w) > 4 || Math.abs(y1 - y0 - PAGE.h) > 4) throw new Error('PAGE_SIZE');
     const header = parseHeader(itemsToText((await pg.getTextContent()).items));
     const scale = 2;
     const canvas = document.createElement('canvas');
-    canvas.width = Math.round(first.w * scale);
-    canvas.height = Math.round(first.cropH * scale);
+    canvas.width = Math.round(PAGE.w * scale);
+    canvas.height = Math.round(PAGE.cropH * scale);
     const ctx = canvas.getContext('2d', { willReadFrequently: true });
     ctx.fillStyle = '#fff';
     ctx.fillRect(0, 0, canvas.width, canvas.height);
-    await pg.render({ canvasContext: ctx, viewport: pg.getViewport({ scale }), transform: [1, 0, 0, 1, 0, -first.cropTop * scale] }).promise;
-    let best = null;
-    let bestRatio = 0;
-    for (const l of layouts) {
-      const r = gridMatch(ctx, l, scale);
-      if (r > bestRatio) { best = l; bestRatio = r; }
-    }
-    if (!best || bestRatio < 0.8) throw new Error('PAGE_LAYOUT');
+    await pg.render({ canvasContext: ctx, viewport: pg.getViewport({ scale }), transform: [1, 0, 0, 1, 0, -PAGE.cropTop * scale] }).promise;
+    const px = ctx.getImageData(0, 0, canvas.width, canvas.height).data;
+    const gray = new Uint8Array(canvas.width * canvas.height);
+    for (let i = 0, j = 0; i < gray.length; i++, j += 4) gray[i] = (px[j] * 77 + px[j + 1] * 150 + px[j + 2] * 29) >> 8;
+    const found = detectZones(gray, canvas.width, canvas.height, scale, PAGE.cropTop);
+    if (found.length < 5) throw new Error('PAGE_LAYOUT');
+    const named = nameZones(found);
     const blob = await new Promise((resolve) => canvas.toBlob(resolve, 'image/jpeg', 0.9));
-    return { header, blob, layout: best, match: bestRatio };
+    return { header, blob, zones: named.zones, title: named.title, page: { w: PAGE.w, h: PAGE.cropH } };
   } finally {
     try { doc.destroy(); } catch (e) { /* ignore */ }
   }

@@ -6,7 +6,8 @@ import { seedDemo } from '../src/core/seed.js';
 import { T, ULD_STATUS, LOCATION } from '../src/core/model.js';
 import * as C from '../src/core/commands.js';
 import * as Q from '../src/core/selectors.js';
-import { LAYOUT_B747_8F, pageRect } from '../src/core/layouts.js';
+import { LAYOUT_B747_8F, pageRect, nameZones, NAMED_GRIDS, PAGE } from '../src/core/layouts.js';
+import { detectZones } from '../src/web/zones.js';
 import { parseHeader, itemsToText } from '../src/web/lirfile.js';
 
 const MIN = 60000;
@@ -480,9 +481,11 @@ test('FILE 1. header text in scattered pdf.js order is read correctly (synthetic
   assert.deepEqual(parseHeader(''), { number: '', date: null, edno: null, reg: '', route: '', std: '' });
 });
 
+const ZONES = ['AR', 'BR', 'CR', 'DR', 'ER', 'AL'].map((code, i) => ({ code, x: 10 + i * 60, y: 20, w: 58, h: 138 }));
+
 test('FILE 2. importLirPage: new flight, same edition refused, new edition revises; registerUld marks a position', async () => {
   const c = await mk();
-  const args = { number: 'xy 123', date: 100, aircraftType: 'B747-8F', stand: 'C9', edno: 3, reg: 'ABCDE', route: 'A - B', std: '02:30', layout: LAYOUT_B747_8F };
+  const args = { number: 'xy 123', date: 100, aircraftType: 'B747-8F', stand: 'C9', edno: 3, reg: 'ABCDE', route: 'A - B', std: '02:30', zones: ZONES, pageSize: { w: 1180, h: 487 } };
   const r = c.store.run(C.importLirPage, args);
   assert.ok(r.ok);
   const fid = r.events[0].payload.flightId;
@@ -495,6 +498,7 @@ test('FILE 2. importLirPage: new flight, same edition refused, new edition revis
   assert.ok(r2.ok);
   assert.equal(r2.events[0].eventType, T.LIR_REVISED);
   assert.equal(c.store.getState().flights[fid].lir.edno, 4);
+  assert.equal(c.store.run(C.importLirPage, { ...args, number: 'AB1', zones: [] }).error.code, 'PAGE_LAYOUT');
   assert.equal(Object.keys(c.store.getState().flights).length, 1);
 
   assert.equal(c.store.run(C.registerUld, { flightId: fid, code: 'ZZ', number: '' }).error.code, 'NOT_FOUND');
@@ -509,10 +513,27 @@ test('FILE 2. importLirPage: new flight, same edition refused, new edition revis
   assert.equal(c.store.run(C.registerUld, { flightId: fid, code: 'CR', number: '!!' }).error.code, 'INVALID_NUMBER');
 });
 
-test('FILE 3. pageRect maps a template cell to page points inside the cropped picture', () => {
-  const cell = LAYOUT_B747_8F.sheet.cells.find((x) => x.code === 'AR');
-  const r = pageRect(LAYOUT_B747_8F, cell);
-  const p = LAYOUT_B747_8F.page;
-  assert.ok(r.x >= 0 && r.y >= 0 && r.x + r.w <= p.w && r.y + r.h <= p.cropH);
-  assert.equal(pageRect({ sheet: LAYOUT_B747_8F.sheet }, cell), null);
+test('FILE 3. detectZones finds boxes drawn on a picture (long lines only, text ignored) and nameZones names them from a known grid', () => {
+  // synthetic page part: 2 pt = 2 px per point; boxes 60 x 100 pt, a "text" smudge inside the first one must not split it
+  const scale = 2, W = 600, H = 700;
+  const g = new Uint8Array(W * H).fill(255);
+  const rect = (x0, y0, x1, y1) => { for (let x = x0; x <= x1; x++) { g[y0 * W + x] = 0; g[y1 * W + x] = 0; } for (let y = y0; y <= y1; y++) { g[y * W + x0] = 0; g[y * W + x1] = 0; } };
+  rect(20, 300, 140, 500); rect(140, 300, 260, 500); rect(260, 300, 380, 500);
+  for (let x = 40; x < 130; x++) g[400 * W + x] = 0; // a line of text strokes spanning the box is short per run? no: make it short
+  for (let x = 60; x < 70; x++) g[400 * W + x] = 0;
+  const z = detectZones(g, W, H, scale, 0);
+  assert.ok(z.length >= 3 && z.length <= 4, 'found ' + z.length);
+  assert.ok(z.some((q) => Math.abs(q.x - 70) < 3 && Math.abs(q.w - 60) < 3));
+  // naming: take the real 8F grid cells as "found" boxes -> names come back, bulk dropped
+  const g8 = NAMED_GRIDS.find((x) => x.key === 'B747_8F');
+  const found = g8.cells.map((c) => ({ x: c.x + 2, y: c.y + 2, w: c.w - 4, h: c.h - 4 }));
+  const n = nameZones(found);
+  assert.equal(n.grid, 'B747_8F');
+  assert.ok(n.zones.some((q) => q.code === 'AR') && n.zones.some((q) => q.code === '11P'));
+  assert.ok(!n.zones.some((q) => q.code === '51' || q.code === '52'), 'bulk is dropped');
+  // unknown shapes are only numbered
+  const un = nameZones([{ x: 1170, y: 470, w: 8, h: 8 }, { x: 1170, y: 400, w: 8, h: 8 }]);
+  assert.deepEqual(un.zones.map((q) => q.code), ['Z1', 'Z2']);
+  assert.equal(un.grid, null);
+  assert.ok(PAGE.cropH > 400);
 });

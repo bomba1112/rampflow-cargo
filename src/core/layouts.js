@@ -75,3 +75,101 @@ export function pageRect(layout, cell) {
   if (!p) return null;
   return { x: p.ox + cell.x * p.sx, y: p.oy + cell.y * p.sy - p.cropTop, w: cell.w * p.sx, h: cell.h * p.sy };
 }
+
+/** The page of the CHAMP LOAD INSTRUCTION REPORT (points) and the part of it that shows the loading diagram. */
+export const PAGE = { w: 1180, h: 834, cropTop: 125, cropH: 487 };
+
+/**
+ * Known fixed airframe grids, only used to NAME the boxes found on a LIR picture (AR, 11P ...). Shapes always come from the
+ * picture itself. Coordinates: points on the cropped page. Flight-specific boxes (PGA, units across the centre line) are not here.
+ */
+const GRID_400F = [
+  { code: 'A1', x: 21, y: 17, w: 44, h: 276 },
+  { code: 'A2', x: 66, y: 17, w: 46, h: 276 },
+  { code: 'B1', x: 114, y: 17, w: 46, h: 138 },
+  { code: 'CR', x: 161, y: 17, w: 60, h: 138 },
+  { code: 'DR', x: 222, y: 17, w: 60, h: 138 },
+  { code: 'ER', x: 284, y: 17, w: 60, h: 138 },
+  { code: 'FR', x: 346, y: 17, w: 59, h: 138 },
+  { code: 'GR', x: 406, y: 17, w: 60, h: 138 },
+  { code: 'HR', x: 468, y: 17, w: 60, h: 138 },
+  { code: 'JR', x: 530, y: 17, w: 60, h: 138 },
+  { code: 'KR', x: 590, y: 17, w: 60, h: 138 },
+  { code: 'LR', x: 652, y: 17, w: 60, h: 138 },
+  { code: 'MR', x: 714, y: 17, w: 59, h: 138 },
+  { code: 'PR', x: 774, y: 17, w: 60, h: 138 },
+  { code: 'RR', x: 836, y: 17, w: 60, h: 138 },
+  { code: 'SR', x: 908, y: 17, w: 60, h: 138 },
+  { code: 'TR', x: 970, y: 17, w: 59, h: 138 },
+  { code: 'UR', x: 1030, y: 17, w: 60, h: 138 },
+  { code: 'X', x: 1092, y: 17, w: 70, h: 138 },
+  { code: 'CL', x: 161, y: 156, w: 60, h: 138 },
+  { code: 'DL', x: 222, y: 156, w: 60, h: 138 },
+  { code: 'EL', x: 284, y: 156, w: 60, h: 138 },
+  { code: 'FL', x: 346, y: 156, w: 59, h: 138 },
+  { code: 'PL', x: 774, y: 156, w: 60, h: 138 },
+  { code: 'RL', x: 836, y: 156, w: 60, h: 138 },
+  { code: 'SL', x: 908, y: 156, w: 60, h: 138 },
+  { code: 'TL', x: 970, y: 156, w: 59, h: 138 },
+  { code: 'UL', x: 1030, y: 156, w: 60, h: 138 },
+  { code: 'GL', x: 406, y: 156, w: 60, h: 138 },
+  { code: 'HL', x: 468, y: 156, w: 60, h: 138 },
+  { code: 'JL', x: 530, y: 156, w: 60, h: 138 },
+  { code: 'KL', x: 590, y: 156, w: 60, h: 138 },
+  { code: 'LL', x: 652, y: 156, w: 60, h: 138 },
+  { code: 'ML', x: 714, y: 156, w: 59, h: 138 },
+  { code: '11P', x: 134, y: 305, w: 46, h: 166 },
+  { code: '12P', x: 181, y: 305, w: 46, h: 166 },
+  { code: '21P', x: 228, y: 305, w: 46, h: 166 },
+  { code: '22P', x: 276, y: 305, w: 46, h: 166 },
+  { code: '23P', x: 323, y: 305, w: 45, h: 166 },
+  { code: '24P', x: 370, y: 305, w: 46, h: 166 },
+  { code: '25P', x: 418, y: 305, w: 45, h: 166 },
+  { code: '31P', x: 708, y: 305, w: 45, h: 166 },
+  { code: '32P', x: 754, y: 305, w: 46, h: 166 },
+  { code: '33P', x: 802, y: 305, w: 45, h: 166 },
+  { code: '41P', x: 848, y: 305, w: 46, h: 166 },
+  { code: '42P', x: 896, y: 305, w: 45, h: 166 },
+  { code: '45R', x: 943, y: 305, w: 30, h: 82 },
+  { code: '45L', x: 943, y: 388, w: 30, h: 83 },
+  { code: '52', x: 976, y: 305, w: 28, h: 166, bulk: true },
+  { code: '554', x: 1006, y: 305, w: 56, h: 166, bulk: true },
+];
+
+export const NAMED_GRIDS = [
+  { key: 'B747_8F', title: 'B747-8F', cells: LAYOUT_B747_8F.sheet.cells.map((c) => ({ code: c.code, bulk: !!c.bulk, ...pageRect(LAYOUT_B747_8F, c) })) },
+  { key: 'B747_400F', title: 'B747-400F', cells: GRID_400F },
+];
+
+const inside = (c, x, y) => x >= c.x && x <= c.x + c.w && y >= c.y && y <= c.y + c.h;
+
+/**
+ * Names the boxes found on a picture. Picks the grid most boxes sit in (>= 60 %), else leaves them numbered Z1, Z2 ...
+ * Bulk positions are dropped (no ULD there). A second box in the same cell gets a suffix (CL, CL.2).
+ * Returns { zones: [{code,x,y,w,h}], grid: key|null, title }.
+ */
+export function nameZones(found) {
+  let best = null;
+  let bestN = 0;
+  for (const g of NAMED_GRIDS) {
+    const n = found.filter((z) => g.cells.some((c) => inside(c, z.x + z.w / 2, z.y + z.h / 2))).length;
+    if (n > bestN) { best = g; bestN = n; }
+  }
+  const use = best && bestN >= found.length * 0.6 ? best : null;
+  const used = new Map();
+  const zones = [];
+  found.forEach((z, i) => {
+    let code = 'Z' + (i + 1);
+    if (use) {
+      const hit = use.cells.filter((c) => inside(c, z.x + z.w / 2, z.y + z.h / 2)).sort((a, b) => a.w * a.h - b.w * b.h)[0];
+      if (hit) {
+        if (hit.bulk) return;
+        const n = (used.get(hit.code) || 0) + 1;
+        used.set(hit.code, n);
+        code = n === 1 ? hit.code : `${hit.code}.${n}`;
+      }
+    }
+    zones.push({ code, x: z.x, y: z.y, w: z.w, h: z.h });
+  });
+  return { zones, grid: use ? use.key : null, title: use ? use.title : '' };
+}

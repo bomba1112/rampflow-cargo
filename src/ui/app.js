@@ -9,7 +9,7 @@ import * as Q from '../core/selectors.js';
 import { pickStorage } from '../web/storage.js';
 import { putFile, getFile, clearFiles } from '../web/files.js';
 import { readLirPdf } from '../web/lirfile.js';
-import { LAYOUT_B747_8F, pageRect, sheetOf } from '../core/layouts.js';
+import { pageRect, sheetOf } from '../core/layouts.js';
 import { S, t, setLang, getLang } from './strings.js';
 
 const TZ = 'Asia/Baku';
@@ -68,7 +68,6 @@ const TAB_ORDER = ['flights', 'lir', 'dollies', 'search', 'load'];
 /* ---------- state ---------- */
 let store;
 let storageKind = 'memory';
-const KNOWN_LAYOUTS = [LAYOUT_B747_8F];
 let ui = { pageUrls: {}, lirNew: null, tab: 'flights', rot: null, zoom: 1, flightId: null, sheet: null, q: '', logAll: false, pending: null };
 let toastTimer = null;
 
@@ -275,12 +274,11 @@ function ensurePage(f) {
 }
 
 function pageSheetHtml(f, url) {
-  const layout = f.lir.layout;
-  const page = layout.page;
-  let h = `<div class="ls pg" id="ls" data-w="${page.w}" data-h="${page.cropH}" data-rot="${effRot()}" style="width:${page.w}px;height:${page.cropH}px"><img class="pgimg" src="${esc(url)}" alt="" draggable="false">`;
-  for (const cell of sheetOf(layout).cells) {
-    if (cell.bulk) continue;
-    const r = pageRect(layout, cell);
+  const page = f.lir.pageSize || { w: 1180, h: 487 };
+  const zones = f.lir.zones || sheetOf(f.lir.layout).cells.filter((c) => !c.bulk).map((c) => ({ code: c.code, ...pageRect(f.lir.layout, c) }));
+  let h = `<div class="ls pg" id="ls" data-w="${page.w}" data-h="${page.h}" data-rot="${effRot()}" style="width:${page.w}px;height:${page.h}px"><img class="pgimg" src="${esc(url)}" alt="" draggable="false">`;
+  for (const cell of zones) {
+    const r = cell;
     const c = Q.lirCell(st(), f.id, cell.code);
     const style = `left:${r.x.toFixed(1)}px;top:${r.y.toFixed(1)}px;width:${r.w.toFixed(1)}px;height:${r.h.toFixed(1)}px`;
     if (c.empty) {
@@ -313,7 +311,7 @@ function sheetLirNew() {
   else if (exist) b = `<div class="card">${t(S.lirFile.exists, { old: exist.lir ? exist.lir.edno : '?', n: h.edno })}</div><button class="btn primary" data-act="lirCreate">${t(S.lirFile.update, { n: h.edno })}</button>`;
   else b = `<label class="lbl">${S.lirFile.number}<input id="lnum" autocomplete="off" autocapitalize="characters" maxlength="8" value="${esc(h.number)}"></label>
     <label class="lbl">${S.lirFile.stand}<input id="lstand" autocomplete="off" autocapitalize="characters" maxlength="6"></label>
-    <p class="sh-s" style="margin:6px 2px">${S.lirFile.layout}: <b>${esc((S.layout.titles[r.layout.key]) || r.layout.title)}</b></p>
+    <p class="sh-s" style="margin:6px 2px">${t(S.lirFile.found, { n: r.zones.length })}${r.title ? ' · ' + esc(r.title) : ''}</p>
     <button class="btn primary" data-act="lirCreate">${S.lirFile.create}</button>`;
   return `<div class="grab"></div><p class="sh-t">${S.lirFile.title}</p><p class="sh-s">${esc(info)}</p><div class="stack">${b}<button class="btn ghost" data-act="closeSheet">${S.btn.close}</button></div>`;
 }
@@ -321,7 +319,7 @@ function sheetLirNew() {
 async function onLirFile(file) {
   toast(S.lirFile.reading, false);
   try {
-    ui.lirNew = await readLirPdf(file, KNOWN_LAYOUTS);
+    ui.lirNew = await readLirPdf(file);
     $('toast').style.display = 'none';
     openSheet({ t: 'lirNew' });
   } catch (e) {
@@ -333,7 +331,7 @@ function viewLir(f) {
   if (!f.lir) return `<div class="card muted">${S.lir.noLir}</div>`;
   const c = Q.counts(st(), f.id);
   const layout = f.lir.layout;
-  const title = (layout.key && S.layout.titles[layout.key]) || layout.title;
+  const title = layout ? (layout.key && S.layout.titles[layout.key]) || layout.title : '';
   const pageMode = !!f.lir.page;
   const url = pageMode ? ensurePage(f) : null;
   if (pageMode && url === 'loading') return `<div class="card muted">${S.lirFile.loading}</div>`;
@@ -772,7 +770,7 @@ const A = {
     const day = h.date != null ? h.date : new Date(new Date().setHours(0, 0, 0, 0)).getTime();
     const num = $('lnum') ? $('lnum').value : h.number;
     const stand = $('lstand') ? $('lstand').value.trim().toUpperCase() : '';
-    const r = store.run(C.importLirPage, { number: num, date: day, aircraftType: r0.layout.title, stand, edno: h.edno, reg: h.reg, route: h.route, std: h.std, layout: r0.layout });
+    const r = store.run(C.importLirPage, { number: num, date: day, aircraftType: r0.title, stand, edno: h.edno, reg: h.reg, route: h.route, std: h.std, zones: r0.zones, pageSize: r0.page });
     if (!r.ok) { toast((r.error && S.err[r.error.code]) || S.err.generic, false, true); return; }
     const flightId = r.events[0].payload.flightId;
     const revised = r.events[0].eventType === T.LIR_REVISED;

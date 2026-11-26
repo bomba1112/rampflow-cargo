@@ -53,6 +53,7 @@ export const AZ = {
     number: 'Uçuş nömrəsi',
     stand: 'Dayanacaq (məcburi deyil)',
     layout: 'Təyyarə tipi',
+    found: 'Tapılan mövqelər: {n}',
     create: 'Uçuşu yarat',
     update: 'Edno {n}-ə yenilə',
     exists: 'Bu uçuş artıq var (Edno {old}). Yeni nəşr: Edno {n}. Telejka qeydləri qalır.',
@@ -200,7 +201,7 @@ export const AZ = {
   },
   err: {
     PAGE_SIZE: 'Bu faylın səhifə ölçüsü LIR-ə uyğun deyil.',
-    PAGE_LAYOUT: 'Bu LIR-in forması tanınmadı. Hələlik yalnız B747-8F forması dəstəklənir.',
+    PAGE_LAYOUT: 'Bu LIR-də mövqe qutuları tapılmadı. Fayl LIR-dir?',
     NOT_PDF: 'Bu PDF fayl deyil.',
     NO_LAYOUT: 'LIR forması seçilməyib.',
     SAME_EDITION: 'Bu uçuş və bu Edno artıq yüklənib.',
