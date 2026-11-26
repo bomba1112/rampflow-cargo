@@ -65,7 +65,7 @@ const TAB_ORDER = ['flights', 'lir', 'dollies', 'search', 'load'];
 /* ---------- state ---------- */
 let store;
 let storageKind = 'memory';
-let ui = { tab: 'flights', flightId: null, sheet: null, q: '', logAll: false, pending: null };
+let ui = { tab: 'flights', orient: 'v', flightId: null, sheet: null, q: '', logAll: false, pending: null };
 let toastTimer = null;
 
 function loadPrefs() {
@@ -73,13 +73,14 @@ function loadPrefs() {
     const p = JSON.parse(localStorage.getItem(PREF_KEY) || '{}');
     if (p.tab && TAB_ORDER.includes(p.tab)) ui.tab = p.tab;
     if (p.flightId) ui.flightId = p.flightId;
+    if (p.orient === 'h' || p.orient === 'v') ui.orient = p.orient;
   } catch (e) {
     /* prefs are a convenience only */
   }
 }
 function savePrefs() {
   try {
-    localStorage.setItem(PREF_KEY, JSON.stringify({ tab: ui.tab, flightId: ui.flightId }));
+    localStorage.setItem(PREF_KEY, JSON.stringify({ tab: ui.tab, flightId: ui.flightId, orient: ui.orient }));
   } catch (e) {
     /* ignore */
   }
@@ -216,24 +217,52 @@ function viewFlights() {
   return h;
 }
 
-function lirCellHtml(flightId, code) {
+function lirCellHtml(flightId, code, label, style) {
   const cell = Q.lirCell(st(), flightId, code);
+  const shown = label || code;
+  const sty = style ? ` style="${style}"` : '';
   if (cell.empty) {
-    return `<div class="lc empty"><span class="code">${esc(code)}</span><span class="top"></span><span class="uld">${S.lir.emptyPos}</span><span class="bot"></span></div>`;
+    return `<div class="lc empty"${sty}><span class="code">${esc(shown)}</span><span class="top"></span><span class="uld">${S.lir.emptyPos}</span><span class="bot"></span></div>`;
   }
   const v = cell.view;
   const cls = v.status === ULD_STATUS.ON_DOLLY ? 'on' : v.status === ULD_STATUS.PRESENTED || v.status === ULD_STATUS.LOADED_CONFIRMED ? 'pres' : 'unk';
-  return `<button class="lc ${cls}" data-act="uld" data-id="${esc(v.id)}">
-    <span class="code">${esc(code)}</span><span class="top">${esc(cell.top)}</span>
+  return `<button class="lc ${cls}"${sty} data-act="uld" data-id="${esc(v.id)}">
+    <span class="code">${esc(shown)}</span><span class="top">${esc(cell.top)}</span>
     <span class="uld">${esc(shortUld(v.number))}</span><span class="bot">${esc(cell.bottom)}</span></button>`;
+}
+
+function deckHtml(f, deck) {
+  const horiz = ui.orient === 'h';
+  const cells = deck.cells
+    .map((c) => {
+      const rs = c.rowSpan || 1;
+      const cs = c.span || 1;
+      // Vertical = the same grid turned 90 degrees clockwise (nose up, right side on the right). Text is never rotated.
+      const style = horiz
+        ? `grid-row:${c.row} / span ${rs};grid-column:${c.col} / span ${cs}`
+        : `grid-row:${c.col} / span ${cs};grid-column:${deck.rows + 1 - (c.row + rs - 1)} / span ${rs}`;
+      return lirCellHtml(f.id, c.code, c.label, style);
+    })
+    .join('');
+  const tpl = horiz ? `grid-template-columns:repeat(${deck.cols},minmax(66px,1fr))` : `grid-template-columns:repeat(${deck.rows},1fr)`;
+  return `<div class="lr"><h3>${esc(S.layout.rows[deck.key] || deck.key)}</h3><div class="lscroll"><div class="lgrid ${horiz ? 'h' : 'v'}" style="${tpl};--cols:${deck.cols}">${cells}</div></div></div>`;
 }
 
 function viewLir(f) {
   if (!f.lir) return `<div class="card muted">${S.lir.noLir}</div>`;
   const c = Q.counts(st(), f.id);
-  let h = `<div class="sumline"><span class="chip c-dolly">${t(S.lir.summary, { a: c.onDolly, b: c.presented, c: c.noDolly })}</span><span class="chip c-none">${t(S.lir.edno, { n: f.lir.edno })} · ${esc((f.lir.layout.key && S.layout.titles[f.lir.layout.key]) || f.lir.layout.title)}</span></div>`;
-  h += `<p class="legend">${S.lir.legend}</p>`;
-  for (const row of f.lir.layout.rows) {
+  const layout = f.lir.layout;
+  const title = (layout.key && S.layout.titles[layout.key]) || layout.title;
+  let h = `<div class="sumline"><span class="chip c-dolly">${t(S.lir.summary, { a: c.onDolly, b: c.presented, c: c.noDolly })}</span><span class="chip c-none">${t(S.lir.edno, { n: f.lir.edno })} · ${esc(title)}</span></div>`;
+  h += `<div class="lirbar"><p class="legend" style="margin:0">${S.lir.legend}</p><button class="btn sm" data-act="rotate">⟳ ${S.lir.rotate}</button></div>`;
+  if (layout.decks) {
+    const horiz = ui.orient === 'h';
+    h += `<div class="axis ${horiz ? 'h' : 'v'}"><span>${horiz ? '◀ ' : '▲ '}${S.lir.nose}</span></div>`;
+    for (const deck of layout.decks) h += deckHtml(f, deck);
+    h += `<div class="axis ${horiz ? 'h' : 'v'}"><span>${S.lir.tail}${horiz ? ' ▶' : ' ▼'}</span></div>`;
+    return h;
+  }
+  for (const row of layout.rows) {
     h += `<div class="lr"><h3>${esc((row.key && S.layout.rows[row.key]) || row.name)}</h3><div class="lrow">${row.codes.map((code) => lirCellHtml(f.id, code)).join('')}</div></div>`;
   }
   return h;
@@ -591,6 +620,7 @@ const A = {
   openFlight(d) { ui.flightId = d.id; ui.tab = 'lir'; ui.q = ''; savePrefs(); $('main').scrollTop = 0; render(); },
   goDollies() { ui.tab = 'dollies'; savePrefs(); render(); },
   menu() { openSheet({ t: 'menu' }); },
+  rotate() { ui.orient = ui.orient === 'v' ? 'h' : 'v'; savePrefs(); render(); },
   lang(d) { setLang(d.lang); render(); },
   closeSheet,
   uld(d) { openSheet({ t: 'uld', id: d.id }); },

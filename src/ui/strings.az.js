@@ -33,7 +33,7 @@ export const AZ = {
   units: { kg: 'kq', h: 'saat', min: 'dəq' },
   kind: { group: 'Qrup', single: '20 ft' },
   layout: {
-    titles: { DEMO_A: 'Demo sxem A (rəsmi deyil)', DEMO_B: 'Demo sxem B (rəsmi deyil)' },
+    titles: { DEMO_A: 'Demo sxem A (rəsmi deyil)', DEMO_B: 'Demo sxem B (rəsmi deyil)', DEMO_C: 'Demo sxem C (rəsmi deyil)' },
     rows: { MAIN_R: 'Əsas göyərtə · sağ tərəf', MAIN_L: 'Əsas göyərtə · sol tərəf', MAIN: 'Əsas göyərtə', LOWER: 'Alt göyərtə' },
   },
 
@@ -50,6 +50,9 @@ export const AZ = {
     emptyPos: 'boş',
     noLir: 'Bu uçuş üçün LIR sxemi yüklənməyib.',
     edno: 'Edno {n}',
+    rotate: 'Çevir',
+    nose: 'BURUN',
+    tail: 'QUYRUQ',
   },
   uld: {
     positionLine: 'Təyyarədə mövqe: {pos} · {weight} kq',

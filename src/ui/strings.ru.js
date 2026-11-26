@@ -6,7 +6,7 @@ export const RU = {
   units: { kg: 'кг', h: 'ч', min: 'мин' },
   kind: { group: 'Сцепка', single: '20 ft' },
   layout: {
-    titles: { DEMO_A: 'Демо-схема A (не официальная)', DEMO_B: 'Демо-схема B (не официальная)' },
+    titles: { DEMO_A: 'Демо-схема A (не официальная)', DEMO_B: 'Демо-схема B (не официальная)', DEMO_C: 'Демо-схема C (не официальная)' },
     rows: { MAIN_R: 'Главная палуба · правая сторона', MAIN_L: 'Главная палуба · левая сторона', MAIN: 'Главная палуба', LOWER: 'Нижняя палуба' },
   },
   appName: 'RampFlow Cargo',
@@ -47,6 +47,9 @@ export const RU = {
     emptyPos: 'пусто',
     noLir: 'Для этого рейса схема LIR не загружена.',
     edno: 'Edno {n}',
+    rotate: 'Повернуть',
+    nose: 'НОС',
+    tail: 'ХВОСТ',
   },
   uld: {
     positionLine: 'Позиция в самолёте: {pos} · {weight} кг',

@@ -136,6 +136,16 @@ await step('Azerbaijani LIR rows are translated, no Cyrillic left in UI chrome',
   const chrome = q('nav').textContent + q('#hdr').textContent + q('main').textContent;
   assert.doesNotMatch(chrome, /[А-Яа-яЁё]/);
 });
+await step('LIR rotate switches between vertical and horizontal grid and remembers it', async () => {
+  tab('lir'); await wait();
+  assert.ok(q('.lgrid.v'), 'starts vertical');
+  click(q('[data-act="rotate"]')); await wait();
+  assert.ok(q('.lgrid.h') && !q('.lgrid.v'));
+  assert.ok(qa('.lc').length >= 30, 'all positions drawn: ' + qa('.lc').length);
+  assert.match(w.localStorage.getItem('rampflow.ui.v1'), /"orient":"h"/);
+  click(q('[data-act="rotate"]')); await wait();
+  assert.ok(q('.lgrid.v'));
+});
 await step('no runtime errors', () => assert.deepEqual(errors, []));
 
 let bad = 0;

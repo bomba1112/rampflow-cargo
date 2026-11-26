@@ -63,6 +63,15 @@ h2 small{font-family:var(--body);font-size:13px;color:var(--muted);text-transfor
 .lr{margin-bottom:12px}
 .lr h3{font-size:13px;color:var(--muted);margin:0 2px 4px;font-weight:700;text-transform:uppercase;letter-spacing:.3px}
 .lrow{display:grid;grid-template-columns:repeat(4,1fr);gap:6px}
+.lscroll{overflow-x:auto;-webkit-overflow-scrolling:touch;padding-bottom:4px}
+.lgrid{display:grid;gap:6px}
+.lgrid.h .lc{min-height:104px}
+.lgrid.v .lc{min-height:84px;padding-top:14px}
+.lgrid .lc .uld{font-size:12px}
+.lgrid .lc.empty{min-height:0}
+.axis{font-family:var(--disp);font-weight:800;font-size:14px;letter-spacing:.8px;color:var(--muted);margin:2px 2px 6px}
+.axis.v{text-align:center}
+.axis.h{display:flex;justify-content:space-between}
 .lc{position:relative;min-height:106px;border:2px solid var(--ink);border-radius:10px;background:#fff;display:flex;flex-direction:column;align-items:center;justify-content:space-between;padding:15px 2px 5px;text-align:center;width:100%}
 .lc .code{position:absolute;left:5px;top:3px;font-size:11px;font-weight:700;color:var(--muted)}
 .lc .top{font-family:var(--disp);font-weight:800;font-size:30px;line-height:1;min-height:30px}
@@ -148,3 +157,19 @@ input:focus-visible,button:focus-visible{outline:3px solid var(--info);outline-o
 .muted{color:var(--muted)}
 .mt{margin-top:10px}
 @media (prefers-reduced-motion:no-preference){#sheet .panel{animation:up .18s ease-out}@keyframes up{from{transform:translateY(30px);opacity:.6}to{transform:none;opacity:1}}}
+/* Phone turned sideways: use the whole width, so the LIR can be seen in one piece like the paper */
+@media (orientation:landscape) and (max-height:600px){
+  #app{max-width:none}
+  .hdr{padding-top:calc(6px + env(safe-area-inset-top));padding-bottom:6px}
+  .hdr .t1{font-size:22px}
+  nav button{min-height:50px;flex-direction:row;justify-content:center;gap:8px}
+  main{padding:8px 12px 16px}
+  .lgrid.h .lc{min-height:92px}
+  .lgrid.h{grid-template-columns:repeat(var(--cols,14),minmax(0,1fr)) !important;min-width:0}
+}
+
+.lirbar{display:flex;gap:10px;align-items:center;margin-bottom:8px}
+.lirbar .legend{flex:1}
+.lirbar .btn{width:auto;min-width:120px;flex:none}
+.lgrid.h .lc .uld{font-size:10.5px;letter-spacing:-.2px;white-space:nowrap;word-break:normal}
+@media (orientation:landscape) and (max-height:600px){ .lgrid.h .lc{min-height:84px} .lgrid.h .lc .top{font-size:26px} .lgrid.h .lc .bot{font-size:20px} }

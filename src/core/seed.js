@@ -5,15 +5,34 @@ import { T, ULD_STATUS, LOCATION } from './model.js';
 const MIN = 60000;
 const slot = (groupId, n) => ({ kind: 'slot', id: `${groupId}:${n}` });
 
-const LAYOUT_A = {
-  key: 'DEMO_A',
-  title: 'Демо-схема A (не официальная)',
-  rows: [
-    { key: 'MAIN_R', name: 'Главная палуба · правая сторона', codes: ['AR', 'BR', 'CR', 'DR'] },
-    { key: 'MAIN_L', name: 'Главная палуба · левая сторона', codes: ['AL', 'BL', 'CL', 'DL'] },
-    { key: 'LOWER', name: 'Нижняя палуба', codes: ['11P', '12P', '21P', '22P'] },
+// 747F-style demo layout. Cells sit on a grid: row 1 = right side, row 2 = left side, col 1 = nose.
+// span:2 means one big unit over two columns (e.g. ER/FR). NOT an official load plan.
+const mainCells = [];
+const addPair = (col, letters, span = 1, label) => {
+  mainCells.push({ code: letters + 'R', row: 1, col, span, label: label && label + 'R' });
+  mainCells.push({ code: letters + 'L', row: 2, col, span, label: label && label + 'L' });
+};
+addPair(1, 'A'); addPair(2, 'B'); addPair(3, 'C'); addPair(4, 'D');
+mainCells.push({ code: 'ER', row: 1, col: 5, span: 2, label: 'ER/FR' }, { code: 'EL', row: 2, col: 5, span: 2, label: 'EL/FL' });
+mainCells.push({ code: 'GR', row: 1, col: 7, span: 2, label: 'GR/HR' }, { code: 'GL', row: 2, col: 7, span: 2, label: 'GL/HL' });
+addPair(9, 'J'); addPair(10, 'K'); addPair(11, 'L'); addPair(12, 'M'); addPair(13, 'P');
+mainCells.push({ code: 'R', row: 1, col: 14, span: 1, rowSpan: 2 });
+const lowerCols = [['11P', 1], ['12P', 2], ['13P', 3], ['21P', 4], ['22P', 5], ['23P', 6], ['31P', 8], ['32P', 9], ['41P', 11], ['42P', 12]];
+const LAYOUT_747 = {
+  key: 'DEMO_C',
+  title: 'Демо-схема C (не официальная)',
+  decks: [
+    { key: 'MAIN', rows: 2, cols: 14, cells: mainCells },
+    { key: 'LOWER', rows: 1, cols: 12, cells: lowerCols.map(([code, col]) => ({ code, row: 1, col, span: 1 })) },
   ],
 };
+
+/** All position codes of a layout, in reading order (old row layouts and new deck layouts). */
+export function codesOf(layout) {
+  if (layout.decks) return layout.decks.flatMap((d) => d.cells.slice().sort((a, b) => a.row - b.row || a.col - b.col).map((c) => c.code));
+  return layout.rows.flatMap((r) => r.codes);
+}
+
 const LAYOUT_B = {
   key: 'DEMO_B',
   title: 'Демо-схема B (не официальная)',
@@ -29,7 +48,7 @@ const LAYOUT_C = {
 };
 
 function uldList(flightId, numbers, layout, skip = []) {
-  const codes = layout.rows.flatMap((r) => r.codes);
+  const codes = codesOf(layout);
   let i = 0;
   return codes.map((code) => {
     if (skip.includes(code) || i >= numbers.length) return { code, uld: null };
@@ -57,8 +76,8 @@ export function seedDemo(store, nowMs = Date.now()) {
   emit(T.FLIGHT_CREATED, 'f-dm202', { flightId: 'f-dm202', number: 'DM202', date, aircraftType: 'B777F', stand: 'D4' }, 200);
   emit(T.FLIGHT_CREATED, 'f-dm303', { flightId: 'f-dm303', number: 'DM303', date: date - 86400000, aircraftType: 'B747-8F', stand: 'C2' }, 1700);
 
-  const a = ['PMC10417ZZ', 'PMC25863ZZ', 'PMC31952ZZ', 'PMC40786ZZ', 'PMC52349ZZ', 'PMC63571ZZ', 'PMC74208ZZ', 'PMC86194ZZ', 'PMC91635ZZ', 'PMC12072ZZ', 'PMC34580ZZ'];
-  emit(T.LIR_LOADED, 'f-dm101', { flightId: 'f-dm101', edno: 2, layout: LAYOUT_A, demo: true, positions: uldList('f-dm101', a, LAYOUT_A, ['DL']) }, 190);
+  const a = Array.from({ length: 40 }, (_, i) => `PMC${i === 0 ? 10417 : 10000 + ((10417 + i * 8231) % 80000)}ZZ`);
+  emit(T.LIR_LOADED, 'f-dm101', { flightId: 'f-dm101', edno: 2, layout: LAYOUT_747, demo: true, positions: uldList('f-dm101', a, LAYOUT_747, ['DR', 'MR', 'DL', '23P']) }, 190);
 
   const b = ['PMC20518ZZ', 'PMC37741ZZ', 'PMC48026ZZ', 'PMC55913ZZ', 'PMC69354ZZ', 'PMC71287ZZ'];
   emit(T.LIR_LOADED, 'f-dm202', { flightId: 'f-dm202', edno: 1, layout: LAYOUT_B, demo: true, positions: uldList('f-dm202', b, LAYOUT_B) }, 190);
