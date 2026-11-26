@@ -125,8 +125,8 @@ await step('language switch to Azerbaijani changes UI and keeps data', async () 
   click(q('#sheet [data-act="closeSheet"]')); await wait();
   assert.match(q('nav').textContent, /Uçuşlar/);
   tab('dollies'); await wait();
-  assert.match(q('main').textContent, /Qatar 136/);
-  assert.match(q('main').textContent, /ÇƏKİCİ/);
+  assert.match(q('main').textContent, /Qrup 136/);
+  assert.match(q('main').textContent, /TİQR/);
   assert.equal(d.documentElement.lang, 'az');
   assert.equal(w.localStorage.getItem('rampflow.lang'), 'az');
 });
