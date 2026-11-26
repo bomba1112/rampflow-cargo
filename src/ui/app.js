@@ -938,6 +938,24 @@ window.addEventListener('resize', () => {
   layoutSheet();
 });
 
+/* ---------- a LIR shared to the app from the phone's Share menu (see sw.js) ---------- */
+async function takeSharedFile() {
+  if (!/[?&]shared=1/.test(location.search)) return;
+  try { history.replaceState(null, '', location.pathname); } catch (e) { /* ignore */ }
+  try {
+    const c = await caches.open('rampflow-share');
+    const hit = await c.match('shared-file');
+    if (!hit) { toast(S.err.NOT_PDF, false, true); return; }
+    const blob = await hit.blob();
+    await c.delete('shared-file');
+    let name = 'lir.pdf';
+    try { name = decodeURIComponent(hit.headers.get('X-File-Name') || name); } catch (e) { /* keep default */ }
+    onLirFile(new File([blob], name, { type: blob.type || 'application/pdf' }));
+  } catch (e) {
+    toast(S.err.generic, false, true);
+  }
+}
+
 /* ---------- start ---------- */
 async function main() {
   loadPrefs();
@@ -950,6 +968,7 @@ async function main() {
   if (!Object.keys(store.getState().flights).length) seedDemo(store);
   curFlight();
   render();
+  takeSharedFile();
   try {
     if ('serviceWorker' in navigator && /^https?:$/.test(location.protocol)) navigator.serviceWorker.register('./sw.js').catch(() => {});
   } catch (e) {
